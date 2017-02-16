@@ -20,8 +20,8 @@ import java.util.*;
 import net.java.sip.communicator.impl.protocol.jabber.extensions.colibri.*;
 import net.java.sip.communicator.impl.protocol.jabber.extensions.jingle.*;
 
+import org.jitsi.impl.neomedia.*;
 import org.jitsi.service.neomedia.*;
-import org.jitsi.service.neomedia.device.*;
 import org.jitsi.service.neomedia.event.*;
 
 /**
@@ -35,21 +35,11 @@ public class AudioChannel
     /**
      * The <tt>CsrcAudioLevelListener</tt> instance which is set on
      * <tt>AudioMediaStream</tt> via
-     * {@link AudioMediaStream#setCsrcAudioLevelListener(
+     * {@link AudioMediaStreamImpl#setCsrcAudioLevelListener(
      * CsrcAudioLevelListener)} in order to receive the audio levels of the
      * contributing sources.
      */
     private CsrcAudioLevelListener csrcAudioLevelListener;
-
-    /**
-     * The <tt>SimpleAudioLevelListener</tt> instance which is set on
-     * <tt>AudioMediaStream</tt> via
-     * {@link AudioMediaStream#setStreamAudioLevelListener(
-     * SimpleAudioLevelListener)} in order to have the audio levels of the
-     * contributing sources calculated and to end enable the functionality of
-     * {@code #lastN}.
-     */
-    private SimpleAudioLevelListener streamAudioLevelListener;
 
     /**
      * The {@link LipSyncHack} from the {@link VideoChannel}.
@@ -95,7 +85,7 @@ public class AudioChannel
     /**
      * Gets the <tt>CsrcAudioLevelListener</tt> instance which is set on
      * <tt>AudioMediaStream</tt> via
-     * {@link AudioMediaStream#setCsrcAudioLevelListener(
+     * {@link AudioMediaStreamImpl#setCsrcAudioLevelListener(
      * CsrcAudioLevelListener)} in order to receive the audio levels of the
      * contributing sources.
      *
@@ -119,33 +109,6 @@ public class AudioChannel
     }
 
     /**
-     * Gets the <tt>SimpleAudioLevelListener</tt> instance which is set on
-     * <tt>AudioMediaStream</tt> via
-     * {@link AudioMediaStream#setStreamAudioLevelListener(
-     * SimpleAudioLevelListener)} in order to have the audio levels of the
-     * contributing sources calculated and to enable the functionality of
-     * {@code #lastN}.
-     *
-     * @return the <tt>SimpleAudioLevelListener</tt> instance
-     */
-    private SimpleAudioLevelListener getStreamAudioLevelListener()
-    {
-        if (streamAudioLevelListener == null)
-        {
-            streamAudioLevelListener
-                = new SimpleAudioLevelListener()
-                {
-                    @Override
-                    public void audioLevelChanged(int level)
-                    {
-                        streamAudioLevelChanged(level);
-                    }
-                };
-        }
-        return streamAudioLevelListener;
-    }
-
-    /**
      * {@inheritDoc}
      */
     @Override
@@ -157,23 +120,16 @@ public class AudioChannel
         {
             MediaStream stream = getStream();
 
-            if (stream instanceof AudioMediaStream)
+            if (stream instanceof AudioMediaStreamImpl)
             {
-                AudioMediaStream audioStream = (AudioMediaStream) stream;
+                AudioMediaStreamImpl audioStream = (AudioMediaStreamImpl) stream;
                 CsrcAudioLevelListener csrcAudioLevelListener
                     = this.csrcAudioLevelListener;
-                SimpleAudioLevelListener streamAudioLevelListener
-                    = this.streamAudioLevelListener;
 
                 if (csrcAudioLevelListener != null)
                 {
                     audioStream.setCsrcAudioLevelListener(
                         csrcAudioLevelListener);
-                }
-                if (streamAudioLevelListener != null)
-                {
-                    audioStream.setStreamAudioLevelListener(
-                        streamAudioLevelListener);
                 }
             }
         }
@@ -198,24 +154,7 @@ public class AudioChannel
 
         if (RTPLevelRelayType.MIXER.equals(newValue))
         {
-            Content content = getContent();
-
-            if (MediaType.AUDIO.equals(content.getMediaType()))
-            {
-                // Allow the Jitsi Videobridge server to send the audio levels
-                // of the contributing sources to the telephony conference
-                // participants.
-                MediaStream stream = getStream();
-                MediaDevice device = content.getMixer();
-                List<RTPExtension> rtpExtensions
-                    = device.getSupportedExtensions();
-
-                if (rtpExtensions.size() == 1)
-                    stream.addRTPExtension((byte) 1, rtpExtensions.get(0));
-
-                ((AudioMediaStream) stream).setStreamAudioLevelListener(
-                        getStreamAudioLevelListener());
-            }
+            throw new UnsupportedOperationException("not any more");
         }
     }
 
@@ -309,9 +248,9 @@ public class AudioChannel
                 .equals(rtpHdrExtPacketExtension.getURI().toString()))
         {
             MediaStream stream = getStream();
-            if (stream != null && stream instanceof AudioMediaStream)
+            if (stream != null && stream instanceof AudioMediaStreamImpl)
             {
-                ((AudioMediaStream) stream).setCsrcAudioLevelListener(
+                ((AudioMediaStreamImpl) stream).setCsrcAudioLevelListener(
                         getCsrcAudioLevelListener());
             }
         }
