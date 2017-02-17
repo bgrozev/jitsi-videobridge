@@ -35,10 +35,8 @@ import org.jitsi.impl.neomedia.*;
 import org.jitsi.impl.neomedia.rtp.*;
 import org.jitsi.impl.neomedia.rtp.translator.*;
 import org.jitsi.impl.neomedia.transform.*;
-import org.jitsi.impl.neomedia.transform.zrtp.*;
 import org.jitsi.service.configuration.*;
 import org.jitsi.service.neomedia.*;
-import org.jitsi.service.neomedia.device.*;
 import org.jitsi.service.neomedia.format.*;
 import org.jitsi.service.neomedia.stats.*;
 import org.jitsi.util.Logger;
@@ -459,29 +457,7 @@ public class RtpChannel
                 int off = p.getOffset();
                 int v = ((data[off] & 0xc0) >>> 6);
 
-                /*
-                 * Prior to adding support for DTLS-SRTP to Jitsi Videobridge,
-                 * the SrtpControl of the MediaStream of this Channel was set to
-                 * a ZrtpControl. Consequently, the RTP PacketTransformer of
-                 * ZrtpControlImpl used to swallow the ZRTP messages. For the
-                 * purposes of compatibility, do not accept the ZRTP messages.
-                 */
-                if (v == 0)
-                {
-                    if ((data[off] & 0x10) /* x */ == 0x10)
-                    {
-                        byte[] zrtpMagicCookie = ZrtpRawPacket.ZRTP_MAGIC;
-
-                        if ((data[off + 4] == zrtpMagicCookie[0])
-                                && (data[off + 5] == zrtpMagicCookie[1])
-                                && (data[off + 6] == zrtpMagicCookie[2])
-                                && (data[off + 7] == zrtpMagicCookie[3]))
-                        {
-                            accept = false;
-                        }
-                    }
-                }
-                else if (v == 2)
+                if (v == 2)
                 {
                     /*
                      * The focus who has organized the telephony conference of
@@ -514,25 +490,7 @@ public class RtpChannel
                      */
                     if (RTPLevelRelayType.MIXER.equals(getRTPLevelRelayType()))
                     {
-                        Map<Byte, MediaFormat> payloadTypes
-                            = stream.getDynamicRTPPayloadTypes();
-
-                        if (payloadTypes != null)
-                        {
-                            int pt = data[off + 1] & 0x7f;
-                            MediaFormat format = payloadTypes.get((byte) pt);
-
-                            if ((format != null)
-                                    && !format.equals(stream.getFormat()))
-                            {
-                                stream.setFormat(format);
-                                synchronized (streamSyncRoot)
-                                {   // otherwise races with stream.start()
-                                    stream.setDirection(MediaDirection.SENDRECV);
-                                }
-                                notify = true;
-                            }
-                        }
+                        throw new UnsupportedOperationException("not any more");
                     }
 
                     if (notify)
@@ -1415,18 +1373,7 @@ public class RtpChannel
             switch (newValue)
             {
             case MIXER:
-                MediaDevice device = getContent().getMixer();
-
-                stream.setDevice(device);
-
-                /*
-                 * It is necessary to start receiving media in order to
-                 * determine the MediaFormat in which the stream will send the
-                 * media it generates.
-                 */
-                if (stream.getFormat() == null)
-                    stream.setDirection(MediaDirection.RECVONLY);
-                break;
+                throw new UnsupportedOperationException("not any more");
 
             case TRANSLATOR:
                 stream.setRTPTranslator(getContent().getRTPTranslator());

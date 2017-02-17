@@ -22,10 +22,8 @@ import net.java.sip.communicator.impl.protocol.jabber.extensions.colibri.*;
 import net.java.sip.communicator.impl.protocol.jabber.extensions.jingle.*;
 
 import org.jitsi.eventadmin.*;
-import org.jitsi.impl.neomedia.device.*;
 import org.jitsi.impl.neomedia.rtp.translator.*;
 import org.jitsi.service.neomedia.*;
-import org.jitsi.service.neomedia.device.*;
 import org.jitsi.util.*;
 import org.jitsi.util.event.*;
 import org.osgi.framework.*;
@@ -94,12 +92,6 @@ public class Content
     private final MediaType mediaType;
 
     /**
-     * The <tt>MediaDevice</tt> which mixes the media received by those of
-     * {@link #channels} which use a mixer as their RTP-level relay.
-     */
-    private MediaDevice mixer;
-
-    /**
      * The name of this <tt>Content</tt>.
      */
     private final String name;
@@ -110,9 +102,8 @@ public class Content
     private final String loggingId;
 
     /**
-     * The <tt>Object</tt> which synchronizes the access to the RTP-level relays
-     * (i.e. {@link #mixer} and {@link #rtpTranslator}) provided by this
-     * <tt>Content</tt>.
+     * The <tt>Object</tt> which synchronizes the access to the RTP-level relay
+     * (i.e. {@link #rtpTranslator}) provided by this <tt>Content</tt>.
      */
     private final Object rtpLevelRelaySyncRoot = new Object();
 
@@ -602,39 +593,6 @@ public class Content
     public MediaType getMediaType()
     {
         return mediaType;
-    }
-
-    /**
-     * Gets the <tt>MediaDevice</tt> which mixes the media received by the
-     * <tt>Channels</tt>  of this <tt>Content</tt> which use a mixer as their
-     * RTP-level relay.
-     *
-     * @return the <tt>MediaDevice</tt> which mixes the media received by the
-     * <tt>Channels</tt>  of this <tt>Content</tt> which use a mixer as their
-     * RTP-level relay
-     */
-    public MediaDevice getMixer()
-    {
-        if (mixer == null)
-        {
-            MediaType mediaType = getMediaType();
-            MediaDevice device
-                = MediaType.AUDIO.equals(mediaType)
-                    ? new AudioSilenceMediaDevice()
-                    : null;
-
-            if (device == null)
-            {
-                throw new UnsupportedOperationException(
-                        "The mixer type of RTP-level relay is not supported"
-                                + " for " + mediaType);
-            }
-            else
-            {
-                mixer = getMediaService().createMixer(device);
-            }
-        }
-        return mixer;
     }
 
     /**

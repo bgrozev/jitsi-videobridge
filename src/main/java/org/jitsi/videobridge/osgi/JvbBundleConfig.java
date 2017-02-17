@@ -18,7 +18,6 @@ package org.jitsi.videobridge.osgi;
 import java.io.*;
 import java.util.*;
 import org.ice4j.*;
-import org.jitsi.impl.neomedia.device.*;
 import org.jitsi.impl.neomedia.transform.csrc.*;
 import org.jitsi.impl.neomedia.transform.srtp.*;
 import org.jitsi.meet.*;
@@ -26,7 +25,6 @@ import org.jitsi.service.configuration.*;
 import org.jitsi.service.neomedia.*;
 import org.jitsi.service.packetlogging.*;
 import org.jitsi.util.*;
-import org.jitsi.videobridge.*;
 
 /**
  * OSGi bundles description for the Jitsi Videobridge.
@@ -202,11 +200,6 @@ public class JvbBundleConfig
         String true_ = Boolean.toString(true);
         String false_ = Boolean.toString(false);
 
-        // It makes no sense for Jitsi Videobridge to pace its RTP output.
-        defaults.put(
-                DeviceConfiguration.PROP_VIDEO_RTP_PACING_THRESHOLD,
-                Integer.toString(Integer.MAX_VALUE));
-
         // XXX Explicitly support Jitsi Meet by default because is is the
         // primary use case of Jitsi Videobridge right now.
         defaults.put(
@@ -233,10 +226,6 @@ public class JvbBundleConfig
         // Videobridge are not in the same network, so we don't need to
         // advertise link-local addresses.
         defaults.put(StackProperties.DISABLE_LINK_LOCAL_ADDRESSES, true_);
-
-        // If DTMF handling is enabled, DTMF packets will be read and swallowed.
-        // We want them forwarded as normal packets.
-        defaults.put(AudioMediaStream.DISABLE_DTMF_HANDLING_PNAME, true_);
 
         // Enable retransmission requests for video streams.
         defaults.put(VideoMediaStream.REQUEST_RETRANSMISSIONS_PNAME, true_);
