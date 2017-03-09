@@ -57,32 +57,37 @@ class RtpChannelDatagramFilter
      * <tt>false</tt>) or RTCP packets (if <tt>true</tt>).
      */
     private final boolean rtcp;
+    private final boolean rtp;
 
     /**
      * Initializes an <tt>RtpChannelDatagramFilter</tt>.
      *
      * @param channel the channel for which to work.
      * @param rtcp whether to accept RTP or RTCP packets.
+     * @param rtp whether to accept RTP packets.
      */
-    RtpChannelDatagramFilter(RtpChannel channel, boolean rtcp)
+    RtpChannelDatagramFilter(RtpChannel channel, boolean rtcp, boolean rtp)
     {
-        this(channel, rtcp, false);
+        this(channel, rtcp, rtp, false);
     }
 
     /**
      * Initializes a new {@code RtpChannelDatagramFilter} instance.
      *
      * @param channel the channel for which to work.
-     * @param rtcp whether to accept RTP or RTCP packets.
+     * @param rtcp whether to accept RTCP packets.
+     * @param rtp whether to accept RTP packets.
      * @param acceptNonRtp {@code true} to accept packets which are neither RTP
      * nor RTCP (e.g. DTLS, STUN, ZRTP); otherwise, {@code false}.
      */
     RtpChannelDatagramFilter(RtpChannel channel,
                              boolean rtcp,
+                             boolean rtp,
                              boolean acceptNonRtp)
     {
         this.channel = channel;
         this.rtcp = rtcp;
+        this.rtp = rtp;
         this.acceptNonRtp = acceptNonRtp;
     }
 
@@ -109,7 +114,7 @@ class RtpChannelDatagramFilter
                 }
                 else
                 {
-                    return !rtcp && acceptRTP(pt & 0x7f);
+                    return rtp && acceptRTP(pt & 0x7f);
                 }
             }
         }

@@ -16,6 +16,7 @@
 package org.jitsi.videobridge;
 
 import java.beans.*;
+import java.net.*;
 import java.util.*;
 
 import net.java.sip.communicator.impl.protocol.jabber.extensions.colibri.*;
@@ -296,27 +297,11 @@ public abstract class TransportManager
     public abstract DtlsControlImpl getDtlsControl(Channel channel);
 
     /**
-     * Gets the <tt>StreamConnector</tt> which represents the datagram sockets
-     * allocated by this instance for the purposes of a specific
-     * <tt>Channel</tt>.
+     * @return the {@link DatagramSocket} for a specific {@link Channel}.
      *
-     * @param channel the <tt>Channel</tt> for which to return the
-     * <tt>StreamConnector</tt>.
-     * @return the <tt>StreamConnector</tt> which represents the datagram
-     * sockets allocated by this instance for the purposes of a specific
-     * <tt>Channel</tt>.
+     * @param channel the <tt>Channel</tt> for which to return the socket.
      */
-    public abstract StreamConnector getStreamConnector(Channel channel);
-
-    /**
-     * Gets the <tt>MediaStreamTarget</tt> which represents the remote addresses
-     * to transmit RTP and RTCP to and from. A non-<tt>null</tt> remote address
-     * will disable latching on the associated component.
-     *
-     * @return the <tt>MediaStreamTarget</tt> which represents the remote
-     * addresses to transmit RTP and RTCP to and from
-     */
-    public abstract MediaStreamTarget getStreamTarget(Channel channel);
+    public abstract DatagramSocket getSocket(Channel channel);
 
     /**
      * Gets the XML namespace of the Jingle transport implemented by this

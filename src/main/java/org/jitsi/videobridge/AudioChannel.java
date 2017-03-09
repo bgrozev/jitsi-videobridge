@@ -292,4 +292,10 @@ public class AudioChannel
 
         return true;
     }
+
+    @Override
+    protected MediaStreamImpl createMediaStream(DtlsControl dtlsControl)
+    {
+        return new AudioMediaStreamImpl(dtlsControl, getContent().getPacketSwitch());
+    }
 }

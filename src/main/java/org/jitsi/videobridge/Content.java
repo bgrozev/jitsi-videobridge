@@ -15,14 +15,13 @@
  */
 package org.jitsi.videobridge;
 
-import java.lang.ref.*;
 import java.util.*;
 
 import net.java.sip.communicator.impl.protocol.jabber.extensions.colibri.*;
 import net.java.sip.communicator.impl.protocol.jabber.extensions.jingle.*;
 
 import org.jitsi.eventadmin.*;
-import org.jitsi.impl.neomedia.rtp.translator.*;
+import org.jitsi.impl.neomedia.rtp.*;
 import org.jitsi.service.neomedia.*;
 import org.jitsi.util.*;
 import org.jitsi.util.event.*;
@@ -37,7 +36,6 @@ import org.osgi.framework.*;
  */
 public class Content
     extends PropertyChangeNotifier
-    implements RTPTranslator.WriteFilter
 {
     /**
      * The @{link #Logger} used by the {@link Content} class. Note that class
@@ -102,17 +100,17 @@ public class Content
     private final String loggingId;
 
     /**
-     * The <tt>Object</tt> which synchronizes the access to the RTP-level relay
-     * (i.e. {@link #rtpTranslator}) provided by this <tt>Content</tt>.
+     * The <tt>Object</tt> which synchronizes the access to
+     * {@link #packetSwitch}.
      */
-    private final Object rtpLevelRelaySyncRoot = new Object();
+    private final Object packetSwitchSyncRoot = new Object();
 
     /**
      * The <tt>RTPTranslator</tt> which forwards the RTP and RTCP traffic
      * between those {@link #channels} which use a translator as their RTP-level
      * relay.
      */
-    private RTPTranslator rtpTranslator;
+    private PacketSwitch packetSwitch;
 
     /**
      * The {@link Logger} to be used by this instance to print debug
@@ -147,34 +145,6 @@ public class Content
             eventAdmin.sendEvent(EventFactory.contentCreated(this));
 
         touch();
-    }
-
-    @Override
-    public boolean accept(
-            MediaStream source,
-            byte[] buffer, int offset, int length,
-            MediaStream destination,
-            boolean data)
-    {
-        boolean accept = true;
-
-        if (destination != null)
-        {
-            RtpChannel dst = RtpChannel.getChannel(destination);
-
-            if (dst != null)
-            {
-                RtpChannel src
-                    = (source == null) ? null : RtpChannel.getChannel(source);
-
-                accept
-                    = dst.rtpTranslatorWillWrite(
-                            data,
-                            buffer, offset, length,
-                            src);
-            }
-        }
-        return accept;
     }
 
     /**
@@ -376,10 +346,10 @@ public class Content
                 }
             }
 
-            synchronized (rtpLevelRelaySyncRoot)
+            synchronized (packetSwitchSyncRoot)
             {
-                if (rtpTranslator != null)
-                    rtpTranslator.dispose();
+                if (packetSwitch != null)
+                    packetSwitch.close();
             }
 
             if (logger.isInfoEnabled())
@@ -606,17 +576,10 @@ public class Content
     }
 
     /**
-     * Gets the <tt>RTPTranslator</tt> which forwards the RTP and RTCP traffic
-     * between the <tt>Channel</tt>s of this <tt>Content</tt> which use a
-     * translator as their RTP-level relay.
-     *
-     * @return the <tt>RTPTranslator</tt> which forwards the RTP and RTCP
-     * traffic between the <tt>Channel</tt>s of this <tt>Content</tt> which use
-     * a translator as their RTP-level relay
      */
-    public RTPTranslator getRTPTranslator()
+    public PacketSwitch getPacketSwitch()
     {
-        synchronized (rtpLevelRelaySyncRoot)
+        synchronized (packetSwitchSyncRoot)
         {
             /*
              * The expired field of Content is initially assigned true and the
@@ -626,38 +589,12 @@ public class Content
              * Consequently, no synchronization with respect to the access of
              * expired is required.
              */
-            if ((rtpTranslator == null) && !expired)
+            if ((packetSwitch == null) && !expired)
             {
-                rtpTranslator = getMediaService().createRTPTranslator();
-                if (rtpTranslator != null)
-                {
-                    new RTPTranslatorWriteFilter(rtpTranslator, this);
-                    if (rtpTranslator instanceof RTPTranslatorImpl)
-                    {
-                        RTPTranslatorImpl rtpTranslatorImpl
-                            = (RTPTranslatorImpl) rtpTranslator;
-
-                        /**
-                         * XXX(gp) some thoughts on the use of initialLocalSSRC:
-                         *
-                         * 1. By using the initialLocalSSRC as the SSRC of the
-                         * translator aren't we breaking the mixing
-                         * functionality? because FMJ is going to use its "own"
-                         * SSRC to for mixed stream, which remains unannounced.
-                         *
-                         * 2. By using an initialLocalSSRC we're losing the FMJ
-                         * collision detection mechanism.
-                         *
-                         * The places that are involved in this have been tagged
-                         * with TAG(cat4-local-ssrc-hurricane).
-                         */
-                        initialLocalSSRC = Videobridge.RANDOM.nextLong() & 0xffffffffl;
-
-                        rtpTranslatorImpl.setLocalSSRC(initialLocalSSRC);
-                    }
-                }
+                packetSwitch = new PacketSwitch();
+                initialLocalSSRC = Videobridge.RANDOM.nextLong() & 0xffff_ffffL;
             }
-            return rtpTranslator;
+            return packetSwitch;
         }
     }
 
@@ -696,53 +633,6 @@ public class Content
     public void fireChannelChanged(RtpChannel channel)
     {
         firePropertyChange(CHANNEL_MODIFIED_PROPERTY_NAME, channel, channel);
-    }
-
-    private static class RTPTranslatorWriteFilter
-        implements RTPTranslator.WriteFilter
-    {
-        private final WeakReference<RTPTranslator> rtpTranslator;
-
-        private final WeakReference<RTPTranslator.WriteFilter> writeFilter;
-
-        public RTPTranslatorWriteFilter(
-                RTPTranslator rtpTranslator,
-                RTPTranslator.WriteFilter writeFilter)
-        {
-            this.rtpTranslator = new WeakReference<>(rtpTranslator);
-            this.writeFilter = new WeakReference<>(writeFilter);
-
-            rtpTranslator.addWriteFilter(this);
-        }
-
-        @Override
-        public boolean accept(
-                MediaStream source,
-                byte[] buffer, int offset, int length,
-                MediaStream destination,
-                boolean data)
-        {
-            RTPTranslator.WriteFilter writeFilter = this.writeFilter.get();
-            boolean accept = true;
-
-            if (writeFilter == null)
-            {
-                RTPTranslator rtpTranslator = this.rtpTranslator.get();
-
-                if (rtpTranslator != null)
-                    rtpTranslator.removeWriteFilter(this);
-            }
-            else
-            {
-                accept
-                    = writeFilter.accept(
-                            source,
-                            buffer, offset, length,
-                            destination,
-                            data);
-            }
-            return accept;
-        }
     }
 
     /**

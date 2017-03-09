@@ -24,8 +24,8 @@ import net.java.sip.communicator.impl.protocol.jabber.extensions.colibri.*;
 import net.java.sip.communicator.impl.protocol.jabber.extensions.jingle.*;
 
 import org.ice4j.util.*;
+import org.jitsi.impl.neomedia.*;
 import org.jitsi.impl.neomedia.rtp.*;
-import org.jitsi.impl.neomedia.rtp.translator.*;
 import org.jitsi.service.configuration.*;
 import org.jitsi.service.neomedia.*;
 import org.jitsi.service.neomedia.codec.*;
@@ -679,12 +679,13 @@ public class VideoChannel
                 int ssrc
                     = (int) encodings[encodings.length - 1].getPrimarySSRC();
 
-                RTCPFeedbackMessageSender rtcpFeedbackMessageSender
-                    = ((RTPTranslatorImpl)getContent().getRTPTranslator())
-                    .getRtcpFeedbackMessageSender();
+                // FFFF send fir
+                //RTCPFeedbackMessageSender rtcpFeedbackMessageSender
+                //    = ((RTPTranslatorImpl)getContent().getRTPTranslator())
+                //    .getRtcpFeedbackMessageSender();
 
-                if (rtcpFeedbackMessageSender != null)
-                    rtcpFeedbackMessageSender.sendFIR(ssrc);
+                //if (rtcpFeedbackMessageSender != null)
+                //    rtcpFeedbackMessageSender.sendFIR(ssrc);
             }
         };
 
@@ -770,5 +771,11 @@ public class VideoChannel
                                + bandwidthEstimator.getLatestFractionLoss());
             }
         };
+    }
+
+    @Override
+    protected MediaStreamImpl createMediaStream(DtlsControl dtlsControl)
+    {
+        return new VideoMediaStreamImpl(dtlsControl, getContent().getPacketSwitch());
     }
 }

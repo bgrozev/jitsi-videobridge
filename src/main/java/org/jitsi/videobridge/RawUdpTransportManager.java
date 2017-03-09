@@ -58,20 +58,13 @@ public class RawUdpTransportManager
     private final int generation;
 
     /**
-     * The ID of the RTCP candidate produced by this Jingle transport.
-     */
-    private final String rtcpCandidateID;
-
-    /**
      * The ID of the RTP candidate produced by this Jingle transport.
      */
     private final String rtpCandidateID;
 
     /**
-     * The <tt>StreamConnector</tt> that represents the datagram sockets
-     * allocated by this instance for the purposes of RTP and RTCP transmission.
      */
-    private final StreamConnector streamConnector;
+    private final DatagramSocket socket;
 
     /**
      * Indicates whether this transport manager has been started.
@@ -106,14 +99,14 @@ public class RawUdpTransportManager
                     channel.getContent().getConference().getLogger());
         addChannel(channel);
 
-        streamConnector = createStreamConnector();
+        socket = createSocket();
+
         /*
          * Each candidate harvest modifies the generation and the IDs of the RTP
          * and RTCP candidates.
          */
         generation = 0;
         rtpCandidateID = generateCandidateID();
-        rtcpCandidateID = generateCandidateID();
     }
 
     /**
@@ -135,8 +128,8 @@ public class RawUdpTransportManager
     {
         super.close();
 
-        if (streamConnector != null)
-            streamConnector.close();
+        if (socket != null)
+            socket.close();
     }
 
     /**
@@ -261,16 +254,12 @@ public class RawUdpTransportManager
     }
 
     /**
-     * Allocates the datagram sockets expected of this <tt>TransportManager</tt>
-     * for the purposes of RTCP and RTP transmission and represents them in the
-     * form of a <tt>StreamConnector</tt> instance.
+     * Allocates the datagram socket expected of this <tt>TransportManager</tt>
+     * for the purposes of RTCP and RTP transmission
      *
-     * @return a new <tt>StreamConnector</tt> which represents the datagram
-     * sockets allocated by this instance for the purposes of RTCP and RTP
-     * transmission
      * @throws IOException if the allocation of datagram sockets fails
      */
-    private StreamConnector createStreamConnector()
+    private DatagramSocket createSocket()
         throws IOException
     {
         /*
@@ -369,10 +358,8 @@ public class RawUdpTransportManager
          * Try to follow the convention that the RTCP port is the next one after
          * the RTP port.
          */
-        streamConnector.getDataSocket();
-        streamConnector.getControlSocket();
-
-        return streamConnector;
+        // FFFF remove this shit
+        return streamConnector.getDataSocket();
     }
 
     /**
@@ -433,32 +420,14 @@ public class RawUdpTransportManager
     @Override
     protected void describe(IceUdpTransportPacketExtension pe)
     {
-        StreamConnector streamConnector = getStreamConnector(channel);
-
         // RTP
         {
-            DatagramSocket socket = streamConnector.getDataSocket();
             CandidatePacketExtension candidate = new CandidatePacketExtension();
 
             candidate.setComponent(
                     CandidatePacketExtension.RTP_COMPONENT_ID);
             candidate.setGeneration(generation);
             candidate.setID(rtpCandidateID);
-            candidate.setIP(socket.getLocalAddress().getHostAddress());
-            candidate.setPort(socket.getLocalPort());
-            candidate.setType(CandidateType.host);
-
-            pe.addCandidate(candidate);
-        }
-
-        // RTCP
-        {
-            DatagramSocket socket = streamConnector.getControlSocket();
-            CandidatePacketExtension candidate = new CandidatePacketExtension();
-
-            candidate.setComponent(CandidatePacketExtension.RTCP_COMPONENT_ID);
-            candidate.setGeneration(generation);
-            candidate.setID(rtcpCandidateID);
             candidate.setIP(socket.getLocalAddress().getHostAddress());
             candidate.setPort(socket.getLocalPort());
             candidate.setType(CandidateType.host);
@@ -481,22 +450,9 @@ public class RawUdpTransportManager
      * {@inheritDoc}
      */
     @Override
-    public StreamConnector getStreamConnector(Channel channel)
+    public DatagramSocket getSocket(Channel channel)
     {
-        return streamConnector;
-    }
-
-    /**
-     * {@inheritDoc}
-     *
-     * The implementation of <tt>RawUdpTransportManager</tt> always returns
-     * <tt>null</tt> because it does not establish connectivity and,
-     * consequently, does not learn the remote addresses and requires latching.
-     */
-    @Override
-    public MediaStreamTarget getStreamTarget(Channel channel)
-    {
-        return null;
+        return socket;
     }
 
     /**

@@ -516,9 +516,7 @@ public class IceUdpTransportManager
                 // will automatically accept DTLS.
                 RtpChannel rtpChannelForDtls = (RtpChannel) channelForDtls;
 
-                rtpChannelForDtls.getDatagramFilter(false).setAcceptNonRtp(
-                        false);
-                rtpChannelForDtls.getDatagramFilter(true).setAcceptNonRtp(
+                rtpChannelForDtls.getDatagramFilter().setAcceptNonRtp(
                         false);
             }
             channelForDtls = sctpConnection;
@@ -531,12 +529,7 @@ public class IceUdpTransportManager
 
             // The new channelForDtls will always accept DTLS packets on its
             // RTP socket.
-            rtpChannel.getDatagramFilter(false).setAcceptNonRtp(true);
-            // If we use rtcpmux, we don't want to accept DTLS packets on the
-            // RTCP socket, because they will be duplicated from the RTP socket,
-            // because both sockets are actually filters on the same underlying
-            // socket.
-            rtpChannel.getDatagramFilter(true).setAcceptNonRtp(!rtcpmux);
+            rtpChannel.getDatagramFilter().setAcceptNonRtp(true);
         }
 
         if (iceConnected)
@@ -808,10 +801,8 @@ public class IceUdpTransportManager
                     }
                     if (newChannelForDtls != null)
                     {
-                        newChannelForDtls.getDatagramFilter(false)
+                        newChannelForDtls.getDatagramFilter()
                                 .setAcceptNonRtp(true);
-                        newChannelForDtls.getDatagramFilter(true)
-                                .setAcceptNonRtp(!rtcpmux);
                     }
                     channelForDtls = newChannelForDtls;
                 }
@@ -820,38 +811,15 @@ public class IceUdpTransportManager
                 {
                     RtpChannel rtpChannel = (RtpChannel) channel;
 
-                    rtpChannel.getDatagramFilter(false).setAcceptNonRtp(false);
-                    rtpChannel.getDatagramFilter(true).setAcceptNonRtp(false);
+                    rtpChannel.getDatagramFilter().setAcceptNonRtp(false);
                 }
             }
 
-            try
+            DatagramSocket socket = channel.getSocket();
+
+            if (socket != null)
             {
-                StreamConnector connector = channel.getStreamConnector();
-
-                if (connector != null)
-                {
-                    DatagramSocket datagramSocket = connector.getDataSocket();
-
-                    if (datagramSocket != null)
-                        datagramSocket.close();
-                    datagramSocket = connector.getControlSocket();
-                    if (datagramSocket != null)
-                        datagramSocket.close();
-
-                    Socket socket = connector.getDataTCPSocket();
-
-                    if (socket != null)
-                        socket.close();
-                    socket = connector.getControlTCPSocket();
-                    if (socket != null)
-                        socket.close();
-                }
-            }
-            catch (IOException ioe)
-            {
-                logger.info(
-                    "Failed to close sockets when closing a channel:" + ioe);
+                socket.close();
             }
 
             EventAdmin eventAdmin = conference.getEventAdmin();
@@ -1366,146 +1334,35 @@ public class IceUdpTransportManager
      * method should be called no more than once for each channel!
      */
     @Override
-    public StreamConnector getStreamConnector(Channel channel)
+    public DatagramSocket getSocket(Channel channel)
     {
         if (!getChannels().contains(channel))
         {
             return null;
         }
 
-        MultiplexingDatagramSocket rtpSocket
-            =  iceStream.getComponent(Component.RTP).getSocket();
-
-        MultiplexingDatagramSocket rtcpSocket;
         if (numComponents > 1 && !rtcpmux)
         {
-            rtcpSocket = iceStream.getComponent(Component.RTCP).getSocket();
-        }
-        else
-        {
-            rtcpSocket = rtpSocket;
+            throw new IllegalStateException("no non-rtcp-mux no more");
         }
 
-        if (rtpSocket == null || rtcpSocket == null)
-        {
-            throw new IllegalStateException("No sockets from ice4j.");
-        }
-
-
-        if (channel instanceof SctpConnection)
-        {
-            try
-            {
-                DatagramSocket dtlsSocket
-                    = rtpSocket.getSocket(new DTLSDatagramFilter());
-
-                return new DefaultStreamConnector(dtlsSocket, null);
-            }
-            catch (SocketException se)
-            {
-                        logger.warn("Failed to create DTLS socket: " + se);
-            }
-        }
-
-        if (! (channel instanceof RtpChannel))
-            return null;
-
-        RtpChannel rtpChannel = (RtpChannel) channel;
-        DatagramSocket channelRtpSocket, channelRtcpSocket;
         try
         {
-            channelRtpSocket
-                = rtpSocket.getSocket(
-                    rtpChannel.getDatagramFilter(false /* RTP */));
-            channelRtcpSocket
-                = rtcpSocket.getSocket(
-                    rtpChannel.getDatagramFilter(true /* RTCP */));
+            MultiplexingDatagramSocket iceSocket
+                = iceStream.getComponent(Component.RTP).getSocket();
+
+            DatagramPacketFilter filter =
+                (channel instanceof RtpChannel)
+                    ? ((RtpChannel) channel).getDatagramFilter()
+                    : new DTLSDatagramFilter();
+
+            return iceSocket.getSocket(filter);
         }
-        catch (SocketException se)
+        catch (IOException ioe)
         {
-            throw new RuntimeException(
-                "Failed to create filtered sockets.", se);
+            logger.warn("Failed to make socket: " + ioe);
+            return null;
         }
-
-        return new DefaultStreamConnector(
-            channelRtpSocket,
-            channelRtcpSocket,
-            rtcpmux);
-    }
-
-    private MediaStreamTarget getStreamTarget()
-    {
-        MediaStreamTarget streamTarget = null;
-        InetSocketAddress[] streamTargetAddresses = new InetSocketAddress[2];
-        int streamTargetAddressCount = 0;
-
-        Component rtpComponent = iceStream.getComponent(Component.RTP);
-
-        if (rtpComponent != null)
-        {
-            CandidatePair selectedPair = rtpComponent.getSelectedPair();
-
-            if (selectedPair != null)
-            {
-                InetSocketAddress streamTargetAddress
-                    = selectedPair
-                        .getRemoteCandidate()
-                            .getTransportAddress();
-
-                if (streamTargetAddress != null)
-                {
-                    streamTargetAddresses[0] = streamTargetAddress;
-                    streamTargetAddressCount++;
-                }
-            }
-        }
-
-        if (rtcpmux)
-        {
-            streamTargetAddresses[1] = streamTargetAddresses[0];
-            streamTargetAddressCount++;
-        }
-        else if (numComponents > 1)
-        {
-            Component rtcpComponent = iceStream.getComponent(Component.RTCP);
-
-            if (rtcpComponent != null)
-            {
-                CandidatePair selectedPair = rtcpComponent.getSelectedPair();
-
-                if (selectedPair != null)
-                {
-                    InetSocketAddress streamTargetAddress
-                        = selectedPair
-                            .getRemoteCandidate()
-                                .getTransportAddress();
-
-                    if (streamTargetAddress != null)
-                    {
-                        streamTargetAddresses[1] = streamTargetAddress;
-                        streamTargetAddressCount++;
-                    }
-                }
-            }
-        }
-
-        if (streamTargetAddressCount > 0)
-        {
-            streamTarget
-                = new MediaStreamTarget(
-                        streamTargetAddresses[0 /* RTP */],
-                        streamTargetAddresses[1 /* RTCP */]);
-        }
-        return streamTarget;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public MediaStreamTarget getStreamTarget(Channel channel)
-    {
-        return getStreamTarget();
     }
 
     /**
@@ -1595,9 +1452,8 @@ public class IceUdpTransportManager
 
     /**
      * Notifies all channels of this <tt>TransportManager</tt> that connectivity
-     * has been established (and they can now obtain valid values through
-     * {@link #getStreamConnector(Channel)} and
-     * {@link #getStreamTarget(Channel)}.
+     * has been established (and they can now obtain a valid socket through
+     * {@link #getSocket(Channel)}).
      */
     private void onIceConnected()
     {
@@ -1787,7 +1643,7 @@ public class IceUdpTransportManager
             if (channelForDtls != null && channelForDtls instanceof RtpChannel)
             {
                 ((RtpChannel) channelForDtls)
-                    .getDatagramFilter(true)
+                    .getDatagramFilter()
                         .setAcceptNonRtp(false);
             }
         }

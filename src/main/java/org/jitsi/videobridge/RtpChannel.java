@@ -39,6 +39,7 @@ import org.jitsi.service.configuration.*;
 import org.jitsi.service.neomedia.*;
 import org.jitsi.service.neomedia.format.*;
 import org.jitsi.service.neomedia.stats.*;
+import org.jitsi.util.*;
 import org.jitsi.util.Logger;
 import org.jitsi.util.event.*;
 import org.jitsi.videobridge.transform.*;
@@ -105,10 +106,11 @@ public class RtpChannel
     /**
      * Holds the {@code RtpChannelDatagramFilter} instances (if any) used by
      * this channel. The filter for RTP is at index {@code 0}, the filter for
-     * RTCP at index {@code 1}.
+     * RTCP at index {@code 1}. The filter at index {@code 2} accepts both
+     * RTP and RTCP packets for this channel.
      */
-    private final RtpChannelDatagramFilter[] datagramFilters
-        = new RtpChannelDatagramFilter[2];
+    private final RtpChannelDatagramFilter datagramFilter
+        = new RtpChannelDatagramFilter(this, true, true);
 
     /**
      * The local synchronization source identifier (SSRC) to be pre-announced.
@@ -319,20 +321,6 @@ public class RtpChannel
             streamTarget.setControlHostAddress(p.getAddress());
             streamTarget.setControlPort(p.getPort());
 
-            InetAddress dataAddr = streamTarget.getDataAddress();
-            int dataPort = streamTarget.getDataPort();
-
-            if (dataAddr != null)
-            {
-                ctrlAddr = streamTarget.getControlAddress();
-                ctrlPort = streamTarget.getControlPort();
-
-                stream.setTarget(
-                        new MediaStreamTarget(
-                                dataAddr, dataPort,
-                                ctrlAddr, ctrlPort));
-            }
-
             accept = true;
         }
         else
@@ -374,7 +362,7 @@ public class RtpChannel
                          * will be provided to the focus by the Jitsi
                          * Videobridge server.
                          */
-                        int ssrc = RTPTranslatorImpl.readInt(data, offset + 4);
+                        int ssrc = RTPUtils.readInt(data, offset + 4);
 
                         if (removeReceiveSSRC(ssrc))
                             notifyFocus();
@@ -410,28 +398,6 @@ public class RtpChannel
         {
             streamTarget.setDataHostAddress(p.getAddress());
             streamTarget.setDataPort(p.getPort());
-            dataAddr = streamTarget.getDataAddress();
-            dataPort = streamTarget.getDataPort();
-
-            InetAddress ctrlAddr = streamTarget.getControlAddress();
-            int ctrlPort = streamTarget.getControlPort();
-            MediaStreamTarget newStreamTarget;
-
-            if (ctrlAddr == null)
-            {
-                newStreamTarget
-                    = new MediaStreamTarget(
-                            new InetSocketAddress(dataAddr, dataPort),
-                            null);
-            }
-            else
-            {
-                newStreamTarget
-                    = new MediaStreamTarget(
-                            dataAddr, dataPort,
-                            ctrlAddr, ctrlPort);
-            }
-            stream.setTarget(newStreamTarget);
 
             accept = true;
         }
@@ -610,8 +576,6 @@ public class RtpChannel
 
         super.describe(iq);
 
-        iq.setDirection(stream.getDirection());
-
         iq.setLastN(null);
 
         long initialLocalSSRC = getInitialLocalSSRC();
@@ -635,30 +599,8 @@ public class RtpChannel
     {
     }
 
-    /**
-     * Gets the <tt>RtpChannelDatagramFilter</tt> that accepts RTP (if
-     * <tt>rtcp</tt> is false) or RTCP (if <tt>rtcp</tt> is true) packets for
-     * this <tt>RtpChannel</tt>.
-     * @param rtcp whether to return the filter for RTP or RTCP packets.
-     * @return the <tt>RtpChannelDatagramFilter</tt> that accepts RTP (if
-     * <tt>rtcp</tt> is false) or RTCP (if <tt>rtcp</tt> is true) packets for
-     * this <tt>RtpChannel</tt>.
-     */
-    RtpChannelDatagramFilter getDatagramFilter(boolean rtcp)
+    RtpChannelDatagramFilter getDatagramFilter()
     {
-        RtpChannelDatagramFilter datagramFilter;
-        int index = rtcp ? 1 : 0;
-
-        synchronized (datagramFilters)
-        {
-            datagramFilter = datagramFilters[index];
-            if (datagramFilter == null)
-            {
-                datagramFilters[index]
-                    = datagramFilter
-                        = new RtpChannelDatagramFilter(this, rtcp);
-            }
-        }
         return datagramFilter;
     }
 
@@ -787,23 +729,15 @@ public class RtpChannel
     {
         super.initialize();
 
-        MediaService mediaService = getMediaService();
-        MediaType mediaType = getContent().getMediaType();
-
         synchronized (streamSyncRoot)
         {
-            stream
-                = mediaService.createMediaStream(
-                        null,
-                        mediaType,
-                        getDtlsControl());
+            stream = createMediaStream(getDtlsControl());
 
              // Add the PropertyChangeListener to the MediaStream prior to
              // performing further initialization so that we do not miss changes
              // to the values of properties we may be interested in.
             stream.addPropertyChangeListener(streamPropertyChangeListener);
             stream.setName(getID());
-            stream.setProperty(RtpChannel.class.getName(), this);
             if (transformEngine != null)
             {
                 stream.setExternalTransformer(transformEngine);
@@ -837,6 +771,11 @@ public class RtpChannel
                 transportConnected();
             }
         }
+    }
+
+    protected MediaStreamImpl createMediaStream(DtlsControl dtlsControl)
+    {
+        return null;
     }
 
     /**
@@ -881,55 +820,21 @@ public class RtpChannel
         if (retransmissionRequester != null)
             retransmissionRequester.setSenderSsrc(getContent().getInitialLocalSSRC());
 
-        MediaStreamTarget streamTarget = createStreamTarget();
-        StreamConnector connector = getStreamConnector();
-        if (connector == null)
-        {
-            logger.info("Not starting stream, connector is null");
-            return;
-        }
-
-        if (streamTarget != null)
-        {
-            InetSocketAddress dataAddr = streamTarget.getDataAddress();
-            if (dataAddr == null)
-            {
-                logger.info(
-                        "Not starting stream, the target's data address is null");
-                return;
-            }
-
-            this.streamTarget.setDataHostAddress(dataAddr.getAddress());
-            this.streamTarget.setDataPort(dataAddr.getPort());
-
-            InetSocketAddress ctrlAddr = streamTarget.getControlAddress();
-            if (ctrlAddr != null)
-            {
-                this.streamTarget.setControlHostAddress(ctrlAddr.getAddress());
-                this.streamTarget.setControlPort(ctrlAddr.getPort());
-            }
-
-            stream.setTarget(streamTarget);
-        }
-        stream.setConnector(connector);
-
         Content content = getContent();
         Conference conference = content.getConference();
 
+        DatagramSocket socket = getSocket();
+        if (socket == null)
+        {
+            logger.warn("Socket not available yet");
+            return;
+        }
+
         if (!stream.isStarted())
         {
-            /*
-             * We've postponed the invocation of the method
-             * getRTPLevelRelayType() in order to make sure that the conference
-             * focus has had a chance to set the RTP-level relay type. We have
-             * to invoke the method MediaStream#setSSRCFactory(SSRCFactory)
-             * before starting the stream.
-             */
-            if (RTPLevelRelayType.MIXER.equals(getRTPLevelRelayType()))
-                stream.setSSRCFactory(new SSRCFactoryImpl(initialLocalSSRC));
-
             synchronized (streamSyncRoot) // Otherwise, races with stream.setDirection().
             {
+                stream.setSocket(socket);
                 stream.start();
             }
 
@@ -938,13 +843,6 @@ public class RtpChannel
             {
                 eventAdmin.sendEvent(EventFactory.streamStarted(this));
             }
-        }
-
-        if (logger.isTraceEnabled())
-        {
-            logger.debug(Logger.Category.STATISTICS,
-                       "ch_direction," + getLoggingId()
-                        + " direction=" + stream.getDirection());
         }
     }
 
@@ -1164,6 +1062,7 @@ public class RtpChannel
             byte[] buffer, int offset, int length,
             RtpChannel source)
     {
+        //FFFF
         return true;
     }
 
@@ -1192,8 +1091,9 @@ public class RtpChannel
     public void setDirection(MediaDirection direction)
     {
         // XXX We modify the stream direction only after latching has finished.
-        if (streamTarget.getDataAddress() != null)
-            stream.setDirection(direction);
+        // FFFF
+        //if (streamTarget.getDataAddress() != null)
+        //    stream.setDirection(direction);
 
         touch(); // It seems this Channel is still active.
     }
@@ -1376,7 +1276,6 @@ public class RtpChannel
                 throw new UnsupportedOperationException("not any more");
 
             case TRANSLATOR:
-                stream.setRTPTranslator(getContent().getRTPTranslator());
                 break;
 
             default:

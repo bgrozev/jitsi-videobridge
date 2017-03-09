@@ -16,6 +16,7 @@
 package org.jitsi.videobridge;
 
 import java.io.*;
+import java.net.*;
 
 import org.jitsi.eventadmin.*;
 import org.jitsi.service.neomedia.*;
@@ -140,9 +141,8 @@ public abstract class Channel
         = new MonotonicAtomicLong();
 
     /**
-     * The <tt>StreamConnector</tt> currently used by this <tt>Channel</tt>.
      */
-    private StreamConnector streamConnector;
+    private DatagramSocket socket;
 
     /**
      * The <tt>TransportManager</tt> that represents the Jingle transport of
@@ -234,35 +234,13 @@ public abstract class Channel
         throws IOException;
 
     /**
-     * Initializes the pair of <tt>DatagramSocket</tt>s for RTP and RTCP
-     * traffic.
-     *
-     * @return a new <tt>StreamConnector</tt> instance which represents the pair
-     * of <tt>DatagramSocket</tt>s for RTP and RTCP traffic
-     * <tt>rtpConnector</tt> is to use
      */
-    protected StreamConnector createStreamConnector()
+    protected DatagramSocket doGetSocket()
     {
         TransportManager transportManager = getTransportManager();
         return
             transportManager != null
-                ? transportManager.getStreamConnector(this)
-                : null;
-    }
-
-    /**
-     * Initializes a <tt>MediaStreamTarget</tt> instance which identifies the
-     * remote addresses to transmit RTP and RTCP to and from.
-     *
-     * @return a <tt>MediaStreamTarget</tt> instance which identifies the
-     * remote addresses to transmit RTP and RTCP to and from
-     */
-    protected MediaStreamTarget createStreamTarget()
-    {
-        TransportManager transportManager = getTransportManager();
-        return
-            transportManager != null
-                ? transportManager.getStreamTarget(this)
+                ? transportManager.getSocket(this)
                 : null;
     }
 
@@ -574,13 +552,13 @@ public abstract class Channel
      * Gets the <tt>StreamConnector</tt> currently used by this instance.
      * @return the <tt>StreamConnector</tt> currently used by this instance.
      */
-    StreamConnector getStreamConnector()
+    DatagramSocket getSocket()
     {
-        if (streamConnector == null)
+        if (socket == null)
         {
-            streamConnector = createStreamConnector();
+            socket = doGetSocket();
         }
-        return streamConnector;
+        return socket;
     }
 
     /**

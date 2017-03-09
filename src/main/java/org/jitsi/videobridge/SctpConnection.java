@@ -26,7 +26,6 @@ import net.java.sip.communicator.impl.protocol.jabber.extensions.jingle.*;
 
 import org.ice4j.socket.*;
 import org.ice4j.util.*;
-import org.jitsi.impl.neomedia.*;
 import org.jitsi.impl.neomedia.transform.dtls.*;
 import org.jitsi.impl.osgi.framework.*;
 import org.jitsi.sctp4j.*;
@@ -443,9 +442,9 @@ public class SctpConnection
         throws IOException
     {
         // connector
-        final StreamConnector connector = getStreamConnector();
+        final DatagramSocket socket = getSocket();
 
-        if (connector == null)
+        if (socket == null)
             return;
 
         synchronized (syncRoot)
@@ -463,7 +462,7 @@ public class SctpConnection
                             {
                                 Sctp.init();
         
-                                runOnDtlsTransport(connector);
+                                runOnDtlsTransport(socket);
                             }
                             catch (IOException e)
                             {
@@ -977,7 +976,7 @@ public class SctpConnection
         }
     }
 
-    private void runOnDtlsTransport(StreamConnector connector)
+    private void runOnDtlsTransport(DatagramSocket socket)
         throws IOException
     {
         DtlsControlImpl dtlsControl
@@ -1093,19 +1092,6 @@ public class SctpConnection
                     }
                 });
 
-        // Setup iceSocket
-        DatagramSocket datagramSocket = connector.getDataSocket();
-        IceSocketWrapper iceSocket;
-
-        if (datagramSocket != null)
-        {
-            iceSocket = new IceUdpSocketWrapper(datagramSocket);
-        }
-        else
-        {
-            iceSocket = new IceTcpSocketWrapper(connector.getDataTCPSocket());
-        }
-
         DatagramPacket recv
             = new DatagramPacket(receiveBuffer, 0, receiveBuffer.length);
 
@@ -1114,7 +1100,7 @@ public class SctpConnection
         {
             do
             {
-                iceSocket.receive(recv);
+                socket.receive(recv);
 
                 RawPacket[] send
                     = {
