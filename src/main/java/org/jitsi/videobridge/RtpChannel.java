@@ -54,7 +54,8 @@ import org.jitsi.videobridge.xmpp.*;
  */
 public class RtpChannel
     extends Channel
-    implements PropertyChangeListener
+    implements PropertyChangeListener, RawPacketFilter
+
 {
     /**
      * The property which controls whether Jitsi Videobridge will perform
@@ -535,7 +536,7 @@ public class RtpChannel
     @Override
     protected void closeStream()
     {
-        if (!streamClosed)
+        if (!streamClosed && stream != null)
         {
             MediaStreamStats2 mss = stream.getMediaStreamStats();
             statistics.bytesReceived = mss.getReceiveStats().getBytes();
@@ -1042,25 +1043,9 @@ public class RtpChannel
     }
 
     /**
-     * Notifies this instance that the <tt>RTPTranslator</tt> that it uses will
-     * write a specific packet/<tt>buffer</tt> from a specific <tt>Channel</tt>.
-     * Allows this instance to apply the logic of <tt>lastN</tt> and disallow
-     * the translation of the specified packet from the specified source
-     * <tt>Channel</tt> into this destination <tt>Channel</tt>.
-     *
-     * @param data
-     * @param buffer
-     * @param offset
-     * @param length
-     * @param source
-     * @return <tt>true</tt> to allow the <tt>RTPTranslator</tt> to write the
-     * specified packet/<tt>buffer</tt> into this <tt>Channel</tt>; otherwise,
-     * <tt>false</tt>
+     * Implements {@link RawPacketFilter#accept(RawPacket)}.
      */
-    boolean rtpTranslatorWillWrite(
-            boolean data,
-            byte[] buffer, int offset, int length,
-            RtpChannel source)
+    public boolean accept(RawPacket pkt)
     {
         //FFFF
         return true;

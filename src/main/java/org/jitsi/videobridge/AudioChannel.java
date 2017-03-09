@@ -260,11 +260,9 @@ public class AudioChannel
      * {@inheritDoc}
      */
     @Override
-    boolean rtpTranslatorWillWrite(
-        boolean data,
-        byte[] buffer, int offset, int length,
-        RtpChannel source)
+    public boolean accept(RawPacket pkt)
     {
+        boolean data = RTPPacketPredicate.INSTANCE.test(pkt);
         if (!data)
         {
             return true;
@@ -286,8 +284,7 @@ public class AudioChannel
 
         if (associatedLipSyncHack != null)
         {
-            associatedLipSyncHack.onRTPTranslatorWillWriteAudio(
-                buffer, offset, length, source);
+            associatedLipSyncHack.onAudioPacket(pkt);
         }
 
         return true;

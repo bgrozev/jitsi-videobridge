@@ -213,20 +213,11 @@ public class LipSyncHack
      * written. The purpose of this is to trigger the hack for the video stream
      * that is associated to the audio SSRC that is about to be written.
      *
-     * @param buffer the buffer which contains the bytes of the received RTP or
-     * RTCP packet.
-     * @param offset the zero-based index in <tt>buffer</tt> at which the bytes
-     * of the received RTP or RTCP packet begin.
-     * @param length the number of bytes in <tt>buffer</tt> beginning at
-     * <tt>offset</tt> which represent the received RTP or RTCP packet.
-     * @param source the {@link Channel} where this packet came from.
      */
-    void onRTPTranslatorWillWriteAudio(
-        byte[] buffer, int offset, int length, RtpChannel source)
+    void onAudioPacket(RawPacket pkt)
     {
         // Decide whether to trigger the hack or not.
-        Long acceptedAudioSSRC
-            = RawPacket.getSSRCAsLong(buffer, offset, length);
+        Long acceptedAudioSSRC = pkt.getSSRCAsLong();
 
         // In order to minimize the synchronization overhead, we process
         // only the first data packet of a given RTP stream.
@@ -250,8 +241,9 @@ public class LipSyncHack
             return;
         }
 
-        MediaStreamTrackDesc[] sourceTracks
-            = source.getEndpoint().getMediaStreamTracks(MediaType.VIDEO);
+        MediaStreamTrackDesc[] sourceTracks =
+            pkt.getMediaStream().getMediaStreamTrackReceiver()
+                .getMediaStreamTracks();
         if (ArrayUtils.isNullOrEmpty(sourceTracks))
         {
             // It seems like we're not ready yet to trigger the hack.
@@ -346,20 +338,10 @@ public class LipSyncHack
      * Notifies this instance that a video packet (RTP or RTCP) is about to be
      * written. The purpose of this is to stop the hack for the SSRC that is
      * about to be written.
-     *
-     * @param buffer the buffer which contains the bytes of the received RTP or
-     * RTCP packet.
-     * @param offset the zero-based index in <tt>buffer</tt> at which the bytes
-     * of the received RTP or RTCP packet begin.
-     * @param length the number of bytes in <tt>buffer</tt> beginning at
-     * <tt>offset</tt> which represent the received RTP or RTCP packet.
-     * @param source the {@link RtpChannel} where this packet came from.
      */
-    void onRTPTranslatorWillWriteVideo(
-        byte[] buffer, int offset, int length, RtpChannel source)
+    void onVideoPacket(RawPacket pkt)
     {
-        Long acceptedVideoSSRC
-            = RawPacket.getSSRCAsLong(buffer, offset, length);
+        Long acceptedVideoSSRC = pkt.getSSRCAsLong();
 
         if (acceptedVideoSSRCs.contains(acceptedVideoSSRC))
         {
@@ -371,7 +353,7 @@ public class LipSyncHack
             acceptedVideoSSRCs.add(acceptedVideoSSRC);
 
             // Make sure we mark as accepted all simulcast SSRCs.
-            MediaStreamTrackDesc[] sourceTracks = source.getStream()
+            MediaStreamTrackDesc[] sourceTracks = pkt.getMediaStream()
                 .getMediaStreamTrackReceiver().getMediaStreamTracks();
 
             if (!ArrayUtils.isNullOrEmpty(sourceTracks))
@@ -407,8 +389,8 @@ public class LipSyncHack
             injectState.stop();
             recurringRunnableExecutor.deRegisterRecurringRunnable(injectState);
 
-            int seqNum = RawPacket.getSequenceNumber(buffer, offset, length);
-            long ts = RawPacket.getTimestamp(buffer, offset, length);
+            int seqNum = pkt.getSequenceNumber();
+            long ts = pkt.getTimestamp();
 
             // NOTE we reserve 10 slots for late media packets.
             int seqNumDelta = (injectState.maxSeqNum + 10 - seqNum) & 0xFFFF;

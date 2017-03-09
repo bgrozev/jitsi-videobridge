@@ -376,22 +376,21 @@ public class VideoChannel
      * {@inheritDoc}
      */
     @Override
-    boolean rtpTranslatorWillWrite(
-        boolean data,
-        byte[] buffer, int offset, int length,
-        RtpChannel source)
+    public boolean accept(RawPacket pkt)
     {
+        boolean data = RTPPacketPredicate.INSTANCE.test(pkt);
         if (!data)
         {
             return true;
         }
 
-        boolean accept = bitrateController.accept(buffer, offset, length);
+        boolean accept
+            = bitrateController.accept(
+                pkt.getBuffer(), pkt.getOffset(), pkt.getLength());
 
         if (accept && lipSyncHack != null)
         {
-            lipSyncHack
-                .onRTPTranslatorWillWriteVideo(buffer, offset, length, source);
+            lipSyncHack.onVideoPacket(pkt);
         }
 
         return accept;
