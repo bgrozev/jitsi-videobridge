@@ -41,7 +41,7 @@ public class Health
      * The {@link MediaType}s of {@link RtpChannel}s supported by
      * {@link Videobridge}. For example, {@link MediaType#DATA} is not supported
      * by {@link
-     * Content#createRtpChannel(String, String, Boolean, RTPLevelRelayType)}.
+     * Content#createRtpChannel(String, String, Boolean, RTPLevelRelayType, boolean)}
      */
     private static final MediaType[] MEDIA_TYPES
         = { MediaType.AUDIO, MediaType.VIDEO };
@@ -98,7 +98,8 @@ public class Health
                             channelBundleId,
                             /* transportNamespace */ null,
                             initiator,
-                            null);
+                            null,
+                            false);
 
                 // Fail as quickly as possible.
                 if (rtpChannel == null)

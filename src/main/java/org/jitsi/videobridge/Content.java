@@ -30,6 +30,7 @@ import org.jitsi.service.neomedia.device.*;
 import org.jitsi.service.neomedia.recording.*;
 import org.jitsi.util.*;
 import org.jitsi.util.event.*;
+import org.jitsi.videobridge.octo.*;
 import org.osgi.framework.*;
 
 /**
@@ -224,7 +225,8 @@ public class Content
     public RtpChannel createRtpChannel(String channelBundleId,
                                        String transportNamespace,
                                        Boolean initiator,
-                                       RTPLevelRelayType rtpLevelRelayType)
+                                       RTPLevelRelayType rtpLevelRelayType,
+                                       boolean octo)
         throws Exception
     {
         RtpChannel channel = null;
@@ -237,29 +239,37 @@ public class Content
             {
                 if (!channels.containsKey(id))
                 {
-                    switch (getMediaType())
+                    if (octo)
                     {
-                    case AUDIO:
-                        channel = new AudioChannel(
+                        channel
+                            = new OctoChannel(
+                                    this, id, channelBundleId,
+                                    OctoTransportManager.NAMESPACE, false);
+                    }
+                    else
+                    {
+                        switch (getMediaType())
+                        {
+                        case AUDIO:
+                            channel = new AudioChannel(
                                 this, id, channelBundleId,
                                 transportNamespace, initiator);
-                        break;
-                    case DATA:
-                        /*
-                         * MediaType.DATA signals an SctpConnection, not an
-                         * RtpChannel.
-                         */
-                        throw new IllegalStateException("mediaType");
-                    case VIDEO:
-                        channel = new VideoChannel(
+                            break;
+                        case DATA:
+                            // MediaType.DATA signals an SctpConnection, not an
+                            // RtpChannel.
+                            throw new IllegalStateException("mediaType");
+                        case VIDEO:
+                            channel = new VideoChannel(
                                 this, id, channelBundleId,
                                 transportNamespace, initiator);
-                        break;
-                    default:
-                        channel = new RtpChannel(
-                            this, id, channelBundleId,
-                            transportNamespace, initiator);
-                        break;
+                            break;
+                        default:
+                            channel = new RtpChannel(
+                                this, id, channelBundleId,
+                                transportNamespace, initiator);
+                            break;
+                        }
                     }
                     channels.put(id, channel);
                 }
@@ -273,7 +283,11 @@ public class Content
         if (logger.isInfoEnabled())
         {
             String transport = "unknown";
-            if (transportNamespace == null)
+            if (octo)
+            {
+                transport = "octo";
+            }
+            else if (transportNamespace == null)
             {
                 transport = "default";
             }

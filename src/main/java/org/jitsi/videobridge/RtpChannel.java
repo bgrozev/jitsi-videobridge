@@ -324,7 +324,7 @@ public class RtpChannel
      * accepted for further processing within Jitsi Videobridge or
      * <tt>false</tt> to reject/drop it
      */
-    private boolean acceptControlInputStreamDatagramPacket(DatagramPacket p)
+    protected boolean acceptControlInputStreamDatagramPacket(DatagramPacket p)
     {
         InetAddress ctrlAddr = streamTarget.getControlAddress();
         int ctrlPort = streamTarget.getControlPort();
@@ -731,7 +731,7 @@ public class RtpChannel
      * <tt>rtcp</tt> is false) or RTCP (if <tt>rtcp</tt> is true) packets for
      * this <tt>RtpChannel</tt>.
      */
-    RtpChannelDatagramFilter getDatagramFilter(boolean rtcp)
+    public RtpChannelDatagramFilter getDatagramFilter(boolean rtcp)
     {
         RtpChannelDatagramFilter datagramFilter;
         int index = rtcp ? 1 : 0;
@@ -905,12 +905,20 @@ public class RtpChannel
                         mediaType,
                         getSrtpControl());
 
+            if (this instanceof OctoChannel)
+            {
+                logger.error("xxx init stream");
+            }
              // Add the PropertyChangeListener to the MediaStream prior to
              // performing further initialization so that we do not miss changes
              // to the values of properties we may be interested in.
             stream.addPropertyChangeListener(streamPropertyChangeListener);
             stream.setName(getID());
             stream.setProperty(RtpChannel.class.getName(), this);
+            if (this instanceof OctoChannel)
+            {
+                stream.setProperty("octo", "true");
+            }
             if (transformEngine != null)
             {
                 stream.setExternalTransformer(transformEngine);
@@ -946,6 +954,10 @@ public class RtpChannel
             // one now, to make sure that the stream is started.
             if (transportManager.isConnected())
             {
+                if (this instanceof OctoChannel)
+                {
+                    logger.error("xxx transport connected");
+                }
                 transportConnected();
             }
         }
@@ -967,6 +979,15 @@ public class RtpChannel
         return transformEngine;
     }
 
+    protected void configureStream(MediaStream stream)
+    {
+        RetransmissionRequester retransmissionRequester
+            = stream.getRetransmissionRequester();
+        if (retransmissionRequester != null)
+            retransmissionRequester.setSenderSsrc(getContent().getInitialLocalSSRC());
+
+    }
+
     /**
      * Starts {@link #stream} if it has not been started yet and if the state of
      * this <tt>Channel</tt> meets the prerequisites to invoke
@@ -984,6 +1005,8 @@ public class RtpChannel
         // The stream hasn't been initialized yet.
         synchronized (streamSyncRoot)
         {
+            if (this instanceof OctoChannel)
+                logger.error("xxx maybeStartStream stream="+stream);
             if (stream == null)
             {
                 return;
@@ -997,9 +1020,12 @@ public class RtpChannel
             retransmissionRequester
                 .setSenderSsrc(getContent().getInitialLocalSSRC());
         }
+        configureStream(stream);
 
         MediaStreamTarget streamTarget = createStreamTarget();
         StreamConnector connector = getStreamConnector();
+        if (this instanceof OctoChannel)
+            logger.error("xxx maybeStartStream target="+streamTarget+" connector="+connector);
         if (connector == null)
         {
             logger.info("Not starting stream, connector is null");
@@ -1049,6 +1075,8 @@ public class RtpChannel
 
             synchronized (streamSyncRoot) // Otherwise, races with stream.setDirection().
             {
+                if (this instanceof OctoChannel)
+                    logger.error("xxx stream.start()");
                 stream.start();
             }
 
