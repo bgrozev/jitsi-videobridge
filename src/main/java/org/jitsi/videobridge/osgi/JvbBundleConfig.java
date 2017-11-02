@@ -186,7 +186,7 @@ public class JvbBundleConfig
         defaults.put(MediaStreamTrackFactory.ENABLE_SVC_PNAME, true_);
 
         // Enable AST RBE by default.
-        defaults.put(RemoteBitrateEstimatorWrapper.ENABLE_AST_RBE_PNAME, true_);
+        //defaults.put(RemoteBitrateEstimatorWrapper.ENABLE_AST_RBE_PNAME, true_);
 
         // This causes RTP/RTCP packets received before the DTLS agent is ready
         // to decrypt them to be dropped. Without it, these packets are passed

@@ -19,6 +19,7 @@ import java.beans.*;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.atomic.*;
 
 import javax.media.rtp.*;
 
@@ -32,6 +33,7 @@ import net.sf.fmj.media.rtp.RTPHeader;
 import org.ice4j.socket.*;
 import org.jitsi.eventadmin.*;
 import org.jitsi.impl.neomedia.*;
+import org.jitsi.impl.neomedia.audiolevel.*;
 import org.jitsi.impl.neomedia.rtp.*;
 import org.jitsi.impl.neomedia.transform.*;
 import org.jitsi.impl.neomedia.transform.zrtp.*;
@@ -327,6 +329,23 @@ public class RtpChannel
      */
     protected boolean acceptControlInputStreamDatagramPacket(DatagramPacket p)
     {
+        AtomicInteger c;
+        if (!(this instanceof OctoChannel))
+        {
+            if (getContent().getMediaType() == MediaType.AUDIO)
+                c = OctoDebug.channelReceiveAudioControl;
+            else
+                c = OctoDebug.channelReceiveVideoControl;
+        }
+        else
+        {
+            if (getContent().getMediaType() == MediaType.AUDIO)
+                c = OctoDebug.octoChannelReceiveAudioControl;
+            else
+                c = OctoDebug.octoChannelReceiveVideoControl;
+        }
+        c.incrementAndGet();
+
         InetAddress ctrlAddr = streamTarget.getControlAddress();
         int ctrlPort = streamTarget.getControlPort();
         boolean accept;
@@ -421,6 +440,23 @@ public class RtpChannel
      */
     protected boolean acceptDataInputStreamDatagramPacket(DatagramPacket p)
     {
+        AtomicInteger c;
+        if (!(this instanceof OctoChannel))
+        {
+            if (getContent().getMediaType() == MediaType.AUDIO)
+                c = OctoDebug.channelReceiveAudioData;
+            else
+                c = OctoDebug.channelReceiveVideoData;
+        }
+        else
+        {
+            if (getContent().getMediaType() == MediaType.AUDIO)
+                c = OctoDebug.octoChannelReceiveAudioData;
+            else
+                c = OctoDebug.octoChannelReceiveVideoData;
+        }
+        c.incrementAndGet();
+
         InetAddress dataAddr = streamTarget.getDataAddress();
         int dataPort = streamTarget.getDataPort();
         boolean accept;
@@ -906,12 +942,20 @@ public class RtpChannel
                         mediaType,
                         getSrtpControl());
 
+            if (this instanceof OctoChannel)
+            {
+                logger.error("xxx init stream");
+            }
              // Add the PropertyChangeListener to the MediaStream prior to
              // performing further initialization so that we do not miss changes
              // to the values of properties we may be interested in.
             stream.addPropertyChangeListener(streamPropertyChangeListener);
             stream.setName(getID());
             stream.setProperty(RtpChannel.class.getName(), this);
+            if (this instanceof OctoChannel)
+            {
+                stream.setProperty("octo", "true");
+            }
             if (transformEngine != null)
             {
                 stream.setExternalTransformer(transformEngine);
@@ -947,6 +991,10 @@ public class RtpChannel
             // one now, to make sure that the stream is started.
             if (transportManager.isConnected())
             {
+                if (this instanceof OctoChannel)
+                {
+                    logger.error("xxx transport connected");
+                }
                 transportConnected();
             }
         }
@@ -1001,6 +1049,8 @@ public class RtpChannel
         // The stream hasn't been initialized yet.
         synchronized (streamSyncRoot)
         {
+            if (this instanceof OctoChannel)
+                logger.error("xxx maybeStartStream stream="+stream);
             if (stream == null)
             {
                 return;
@@ -1011,6 +1061,8 @@ public class RtpChannel
 
         MediaStreamTarget streamTarget = createStreamTarget();
         StreamConnector connector = getStreamConnector();
+        if (this instanceof OctoChannel)
+            logger.error("xxx maybeStartStream target="+streamTarget+" connector="+connector);
         if (connector == null)
         {
             logger.info("Not starting stream, connector is null");
@@ -1060,6 +1112,8 @@ public class RtpChannel
 
             synchronized (streamSyncRoot) // Otherwise, races with stream.setDirection().
             {
+                if (this instanceof OctoChannel)
+                    logger.error("xxx stream.start()");
                 stream.start();
             }
 

@@ -357,8 +357,8 @@ public class BitrateController
         SimulcastController simulcastController
             = ssrcToSimulcastController.get(ssrc);
 
-        return simulcastController != null
-            && simulcastController.accept(pkt);
+        return simulcastController == null
+            || simulcastController.accept(pkt);
     }
 
     /**
@@ -387,6 +387,7 @@ public class BitrateController
                 // as often resolution changes can negatively impact user
                 // experience.
                 return;
+                // huh? there's code below that initializes ssrcToSimulcastController...
             }
 
             lastBwe = bweBps;

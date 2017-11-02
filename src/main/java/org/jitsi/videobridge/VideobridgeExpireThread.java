@@ -18,6 +18,7 @@ package org.jitsi.videobridge;
 import java.lang.ref.*;
 import java.util.*;
 
+import org.jitsi.impl.neomedia.audiolevel.*;
 import org.jitsi.util.*;
 
 /**
@@ -173,6 +174,18 @@ class VideobridgeExpireThread
         long wakeup = -1;
         final long sleep = Channel.DEFAULT_EXPIRE * 1000;
 
+        OctoDebug.octoChannelReceiveAudioControl.incrementAndGet();
+        OctoDebug.octoChannelReceiveAudioControl.decrementAndGet(); //brilliant...
+
+        new Thread(){
+            @Override
+            public void run()
+            {
+                System.err.println("yellow");
+            }
+
+        }.start();
+
         do
         {
             /*
@@ -180,7 +193,6 @@ class VideobridgeExpireThread
              * then it is time for this Thread to stop executing.
              */
             Videobridge videobridge = this.videobridge.get();
-
             if (videobridge == null)
                 break;
 

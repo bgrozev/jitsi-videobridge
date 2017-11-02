@@ -282,6 +282,7 @@ public class Videobridge
                                 name,
                                 enableLogging,
                                 gid);
+                    logger.error("xxx new conference gid="+gid);
                     conferences.put(id, conference);
                 }
             }
