@@ -300,7 +300,18 @@ public class Content
 
             if (octo)
             {
-                channel = new OctoChannel(this, id);
+                if (MediaType.AUDIO.equals(getMediaType()))
+                {
+                    channel = new AudioOctoChannel(this, id);
+                }
+                else if (MediaType.VIDEO.equals(getMediaType()))
+                {
+                    channel = new VideoOctoChannel(this, id);
+                }
+                else
+                {
+                    channel = null;
+                }
             }
             else
             {

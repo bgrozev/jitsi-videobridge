@@ -8,7 +8,7 @@ import org.jitsi.videobridge.*;
 import java.net.*;
 import java.util.*;
 
-public class AudioOctoChannel
+public class VideoOctoChannel
     extends AudioChannel
 {
     private final OctoChannel octoChannel;
@@ -32,13 +32,13 @@ public class AudioOctoChannel
      * <tt>null</tt> to use the default value.
      * @throws Exception if an error occurs while initializing the new instance
      */
-    public AudioOctoChannel(Content content, String id) throws Exception
+    public VideoOctoChannel(Content content, String id) throws Exception
     {
         super(
             content, id, null /*channelBundleId*/,
             OctoTransportManager.NAMESPACE, false /*initiator*/);
 
-        octoChannel = new OctoChannel(this, id, MediaType.AUDIO);
+        octoChannel = new OctoChannel(this, id, MediaType.VIDEO);
     }
 
     /**

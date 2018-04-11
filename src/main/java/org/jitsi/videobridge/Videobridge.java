@@ -959,9 +959,14 @@ public class Videobridge
 
                 if (octoChannelIQ != null)
                 {
-                    if (channel instanceof OctoChannel)
+                    if (channel instanceof AudioOctoChannel)
                     {
-                        ((OctoChannel) channel)
+                        ((AudioOctoChannel) channel)
+                            .setRelayIds(octoChannelIQ.getRelays());
+                    }
+                    else if (channel instanceof VideoOctoChannel)
+                    {
+                        ((VideoOctoChannel) channel)
                             .setRelayIds(octoChannelIQ.getRelays());
                     }
                     else

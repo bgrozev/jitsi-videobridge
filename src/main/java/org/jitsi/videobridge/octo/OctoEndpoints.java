@@ -50,7 +50,7 @@ public class OctoEndpoints
     /**
      * The conference's Octo channel for video, if there is one, or {@code null}.
      */
-    private OctoChannel videoChannel;
+    private VideoOctoChannel videoChannel;
 
     /**
      * Used to synchronize access to the {@link Endpoint}s of the conference
@@ -127,7 +127,7 @@ public class OctoEndpoints
         synchronized (endpointsSyncRoot)
         {
             List<OctoEndpoint> octoEndpoints = getOctoEndpoints();
-            if (MediaType.VIDEO.equals(mediaType))
+            if (MediaType.VIDEO.equals(mediaType) && channel instanceof VideoOctoChannel)
             {
                 if (videoChannel != null)
                 {
@@ -135,19 +135,19 @@ public class OctoEndpoints
 
                     octoEndpoints.forEach(e -> e.removeChannel(videoChannel));
                 }
-                videoChannel = channel;
+                videoChannel = (VideoOctoChannel) channel;
                 octoEndpoints.forEach(e -> e.addChannel(videoChannel));
             }
-            else if (MediaType.AUDIO.equals(mediaType))
+            else if (MediaType.AUDIO.equals(mediaType) && channel instanceof AudioOctoChannel)
             {
                 if (audioChannel != null)
                 {
                     logger.error("Replacing an existing audio channel");
 
-                    octoEndpoints.forEach(e -> e.removeChannel(videoChannel));
+                    octoEndpoints.forEach(e -> e.removeChannel(audioChannel));
                 }
-                audioChannel = (Achannel;
-                octoEndpoints.forEach(e -> e.addChannel(videoChannel));
+                audioChannel = (AudioOctoChannel) channel;
+                octoEndpoints.forEach(e -> e.addChannel(audioChannel));
             }
             else
             {
@@ -248,10 +248,15 @@ public class OctoEndpoints
      */
     public void sendMessage(String msg)
     {
-        OctoChannel channel = audioChannel;
+        OctoChannel channel = null;
+        if (audioChannel != null)
+        {
+            channel = audioChannel.getOctoChannel();
+        }
+
         if (channel == null)
         {
-            channel = videoChannel;
+            channel = videoChannel.getOctoChannel();
         }
 
         if (channel != null)

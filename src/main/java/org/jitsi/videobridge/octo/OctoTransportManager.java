@@ -135,12 +135,18 @@ public class OctoTransportManager
      */
     public OctoTransportManager(Channel channel)
     {
-        if (!(channel instanceof OctoChannel))
+        if (channel instanceof AudioOctoChannel)
+        {
+            this.channel = ((AudioOctoChannel) channel).getOctoChannel();
+        }
+        else if (channel instanceof VideoOctoChannel)
+        {
+            this.channel = ((VideoOctoChannel) channel).getOctoChannel();
+        }
+        else
         {
             throw new IllegalArgumentException("channel is not an OctoChannel");
         }
-
-        this.channel = (OctoChannel) channel;
 
         logger
             = Logger.getLogger(

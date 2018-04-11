@@ -116,7 +116,7 @@ public class OctoChannel
         this.mediaType = mediaType;
 
         octoEndpoints = conference.getOctoEndpoints();
-        octoEndpoints.setChannel(mediaType, this);
+        octoEndpoints.setChannel(mediaType, channel);
 
         // We are going to use one of the threads already reading from the
         // socket to handle data packets. Since both the audio and the video
@@ -140,7 +140,7 @@ public class OctoChannel
      * Sets the list of remote Octo relays that this channel should transmit to.
      * @param relayIds the list of strings which identify a remote relay.
      */
-    public void setRelayIds(List<String> relayIds)
+    void setRelayIds(List<String> relayIds)
     {
         OctoTransportManager transportManager = getOctoTransportManager();
 
