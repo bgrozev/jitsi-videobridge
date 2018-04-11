@@ -33,7 +33,6 @@ import java.util.stream.*;
  * @author Boris Grozev
  */
 public class OctoChannel
-    extends RtpChannel
 {
     /**
      * The {@link Logger} used by the {@link RtpChannel} class to print debug
@@ -94,13 +93,13 @@ public class OctoChannel
      */
     private final boolean handleData;
 
+    private final RtpChannel channel;
+
     /**
      * Initializes a new <tt>Channel</tt> instance which is to have a specific
      * ID. The initialization is to be considered requested by a specific
      * <tt>Content</tt>.
      *
-     * @param content the <tt>Content</tt> which is initializing the new
-     * instance
      * @param id the ID of the new instance. It is expected to be unique
      * within the
      * list of <tt>Channel</tt>s listed in <tt>content</tt> while the new
@@ -108,16 +107,13 @@ public class OctoChannel
      * is listed there as well.
      * @throws Exception if an error occurs while initializing the new instance
      */
-    public OctoChannel(Content content, String id)
+    public OctoChannel(RtpChannel channel, String id, MediaType mediaType)
         throws Exception
     {
-        super(
-                content, id, null /*channelBundleId*/,
-                OctoTransportManager.NAMESPACE, false /*initiator*/);
-
-        Conference conference = content.getConference();
+        Conference conference = channel.getContent().getConference();
+        this.channel = channel;
         conferenceId = conference.getGid();
-        mediaType = content.getMediaType();
+        this.mediaType = mediaType;
 
         octoEndpoints = conference.getOctoEndpoints();
         octoEndpoints.setChannel(mediaType, this);
@@ -129,18 +125,7 @@ public class OctoChannel
         handleData = MediaType.VIDEO.equals(mediaType);
 
         logger
-            = Logger.getLogger(classLogger, content.getConference().getLogger());
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void describe(ColibriConferenceIQ.ChannelCommon commonIq)
-    {
-        super.describe(commonIq);
-
-        commonIq.setType(ColibriConferenceIQ.OctoChannel.TYPE);
+            = Logger.getLogger(classLogger, conference.getLogger());
     }
 
     /**
@@ -162,24 +147,19 @@ public class OctoChannel
         transportManager.setRelayIds(relayIds);
     }
 
-    @Override
-    public boolean setRtpEncodingParameters(
+    void setRtpEncodingParameters(
         List<SourcePacketExtension> sources,
         List<SourceGroupPacketExtension> sourceGroups)
     {
-        boolean changed = super.setRtpEncodingParameters(sources, sourceGroups);
-
-        if (changed && octoEndpoints != null)
+        if (octoEndpoints != null)
         {
             octoEndpoints.updateEndpoints(
                 Arrays.stream(
-                    getStream().getMediaStreamTrackReceiver()
+                    channel.getStream().getMediaStreamTrackReceiver()
                         .getMediaStreamTracks())
                     .map(MediaStreamTrackDesc::getOwner)
                     .collect(Collectors.toSet()));
         }
-
-        return changed;
     }
 
     /**
@@ -190,7 +170,7 @@ public class OctoChannel
     {
         if (transportManager == null)
         {
-            transportManager = (OctoTransportManager) getTransportManager();
+            transportManager = (OctoTransportManager) channel.getTransportManager();
         }
         return transportManager;
     }
@@ -203,71 +183,9 @@ public class OctoChannel
         return mediaType;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public RtpChannelDatagramFilter getDatagramFilter(boolean rtcp)
+    RtpChannelDatagramFilter getDatagramFilter(boolean rtcp)
     {
         return rtcp ? rtcpFilter : rtpFilter;
-    }
-
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected void configureStream(MediaStream stream)
-    {
-        // Prevent things like retransmission requests to be enabled.
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p/>
-     * This is called by the {@link MediaStream}'s input thread
-     * ({@link org.jitsi.impl.neomedia.RTPConnectorInputStream}, either RTP or
-     * RTCP), after if has already {@code receive()}ed a packet from its
-     * socket. The flow of this thread is:
-     * <pre>
-     * 1. Call {@code receive()} on the
-     * {@link org.ice4j.socket.MultiplexedDatagramSocket}
-     *     1.1. The socket's {@link org.ice4j.socket.DatagramPacketFilter}s are
-     *     applied (i.e. the associated {@link OctoDatagramPacketFilter}) to
-     *     potential packets to be accepted.
-     *     1.2. {@code receive()} only returns when a matching packet is
-     *     available.
-     * 2. The {@link org.jitsi.impl.neomedia.RTPConnectorInputStream}'s
-     * datagram packet filters are applied, and this is where
-     * {@link #acceptDataInputStreamDatagramPacket} executes. If any of the
-     * filters reject the packet, it is dropped.
-     * 3. The packet is converted to a {@link RawPacket} and passed through the
-     * {@link MediaStream}'s transform chain.
-     * </pre>
-     */
-    @Override
-    protected boolean acceptDataInputStreamDatagramPacket(DatagramPacket p)
-    {
-        super.acceptDataInputStreamDatagramPacket(p);
-
-        // super touches only if it determined that it should accept.
-        touch(ActivityType.PAYLOAD /* data received */);
-        return true;
-    }
-
-    /**
-     * {@inheritDoc}
-     * <p/>
-     * See {@link #acceptDataInputStreamDatagramPacket(DatagramPacket)}.
-     */
-    @Override
-    protected boolean acceptControlInputStreamDatagramPacket(DatagramPacket p)
-    {
-        super.acceptControlInputStreamDatagramPacket(p);
-
-        // super touches only if it determined that it should accept.
-        touch(ActivityType.PAYLOAD /* data received */);
-        return true;
     }
 
     /**
@@ -288,7 +206,7 @@ public class OctoChannel
          */
         private OctoDatagramPacketFilter(boolean rtcp)
         {
-            super(OctoChannel.this, rtcp);
+            super(OctoChannel.this.channel, rtcp);
             this.rtcp = rtcp;
         }
 
@@ -368,11 +286,7 @@ public class OctoChannel
         octoEndpoints.messageTransport.onMessage(this, msg);
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public AbstractEndpoint getEndpoint(long ssrc)
+    AbstractEndpoint getEndpoint(long ssrc)
     {
         return octoEndpoints == null ? null : octoEndpoints.findEndpoint(ssrc);
     }

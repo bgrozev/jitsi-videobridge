@@ -45,7 +45,7 @@ public class OctoEndpoints
     /**
      * The conference's Octo channel for audio, if there is one, or {@code null}.
      */
-    private OctoChannel audioChannel;
+    private AudioOctoChannel audioChannel;
 
     /**
      * The conference's Octo channel for video, if there is one, or {@code null}.
@@ -122,7 +122,7 @@ public class OctoEndpoints
      * @param mediaType the media type of the channel.
      * @param channel the channel.
      */
-    void setChannel(MediaType mediaType, OctoChannel channel)
+    void setChannel(MediaType mediaType, RtpChannel channel)
     {
         synchronized (endpointsSyncRoot)
         {
@@ -146,7 +146,7 @@ public class OctoEndpoints
 
                     octoEndpoints.forEach(e -> e.removeChannel(videoChannel));
                 }
-                audioChannel = channel;
+                audioChannel = (Achannel;
                 octoEndpoints.forEach(e -> e.addChannel(videoChannel));
             }
             else
