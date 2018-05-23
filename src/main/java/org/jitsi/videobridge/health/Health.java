@@ -99,6 +99,7 @@ public class Health
                             /* transportNamespace */ null,
                             initiator,
                             null);
+                rtpChannel.setEndpoint(endpoint);
 
                 // Fail as quickly as possible.
                 if (rtpChannel == null)
@@ -221,15 +222,20 @@ public class Health
             List<RtpChannel> bRtpChannels = b.getChannels(mediaType);
 
             // Fail as quickly as possible
+            if (count == 0)
+            {
+                throw new IllegalStateException("Endpoint has no channels");
+            }
             if (count != bRtpChannels.size())
             {
-                throw new IllegalStateException(
-                        "Endpoint#getChannels(MediaType)");
+                throw new IllegalStateException("Channel count mismatch.");
             }
             else
             {
                 for (int i = 0; i < count; ++i)
+                {
                     connect(aRtpChannels.get(i), bRtpChannels.get(i));
+                }
             }
         }
 
