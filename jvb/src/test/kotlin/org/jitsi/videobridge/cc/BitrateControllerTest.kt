@@ -33,6 +33,7 @@ import org.jitsi.nlj.rtp.VideoRtpPacket
 import org.jitsi.nlj.util.Bandwidth
 import org.jitsi.nlj.util.bps
 import org.jitsi.nlj.util.kbps
+import org.jitsi.nlj.util.mbps
 import org.jitsi.test.time.FakeClock
 import org.jitsi.utils.logging.DiagnosticContext
 import org.jitsi.utils.logging2.createLogger
@@ -176,6 +177,33 @@ class BitrateControllerTest : ShouldSpec() {
 
                     verifyTileViewLastN1()
                 }
+            }
+            context("Select two endpoints") {
+                // A is dominant speaker
+                bc.setEndpointOrdering("A", "B", "C", "D")
+                bc.setVideoConstraints(vcc.selectTwo("A", "B"))
+                bc.setLastN(2)
+
+                clock.elapse(2.secs)
+
+                bc.bwe = 10.mbps
+                bc.forwardedEndpointsHistory.last().event.shouldBe(setOf("A", "B"))
+
+                clock.elapse(2.secs)
+                // D is now dominant speaker.
+                bc.setEndpointOrdering("D", "A", "B", "C")
+                bc.forwardedEndpointsHistory.last().event.shouldBe(setOf("A", "B"))
+
+                clock.elapse(2.secs)
+                bc.bwe = 0.mbps
+                clock.elapse(2.secs)
+                bc.bwe = 10.mbps
+                bc.forwardedEndpointsHistory.last().event.shouldBe(setOf("A", "B"))
+
+                clock.elapse(2.secs)
+                // C is now dominant speaker.
+                bc.setEndpointOrdering("C", "D", "A", "B")
+                bc.forwardedEndpointsHistory.last().event.shouldBe(setOf("A", "B"))
             }
         }
     }
@@ -698,7 +726,7 @@ private class BitrateControllerWrapper(vararg endpointIds: String, val clock: Fa
     )
 
     fun setEndpointOrdering(vararg endpoints: String) {
-        logger.info("Set endpoints $endpoints")
+        logger.info("Set endpoints ${endpoints.joinToString(",")}")
         bc.endpointOrderingChanged(mutableListOf(*endpoints))
     }
 
@@ -768,6 +796,12 @@ fun <T> List<Collection<T>>.shouldContainInOrder(vararg ts: Collection<T>) {
 private fun VideoConstraintsCompatibility.stageView(endpoint: String): ImmutableMap<String, VideoConstraints> {
     setMaxFrameHeight(720)
     setSelectedEndpoints(setOf(endpoint))
+    return ImmutableMap.copyOf(computeVideoConstraints())
+}
+
+private fun VideoConstraintsCompatibility.selectTwo(a: String, b: String): ImmutableMap<String, VideoConstraints> {
+    setMaxFrameHeight(720)
+    setSelectedEndpoints(setOf(a, b))
     return ImmutableMap.copyOf(computeVideoConstraints())
 }
 
