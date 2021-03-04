@@ -127,6 +127,8 @@ public class Videobridge
 
     private final EventEmitter<EventHandler> eventEmitter = new EventEmitter<>();
 
+    private final VideobridgeShim shim = new VideobridgeShim(this);
+
     static
     {
         org.jitsi.rtp.util.BufferPool.Companion.setGetArray(ByteBufferPool::getBuffer);
@@ -350,57 +352,10 @@ public class Videobridge
      */
     public IQ handleColibriConferenceIQ(ColibriConferenceIQ conferenceIq)
     {
-        Conference conference;
-        try
-        {
-            conference = getOrCreateConference(conferenceIq);
-        }
-        catch (ConferenceNotFoundException e)
-        {
-            return IQUtils.createError(
-                    conferenceIq,
-                    XMPPError.Condition.bad_request,
-                    "Conference not found for ID: " + conferenceIq.getID());
-        }
-        catch (InGracefulShutdownException e)
-        {
-            return ColibriConferenceIQ.createGracefulShutdownErrorResponse(conferenceIq);
-        }
-
-        return conference.getShim().handleColibriConferenceIQ(conferenceIq);
+        return shim.handleColibriConferenceIQ(conferenceIq);
     }
 
-    /**
-     * Handles a COLIBRI request asynchronously.
-     */
-    private void handleColibriRequest(XmppConnection.ColibriRequest request)
-    {
-        ColibriConferenceIQ conferenceIq = request.getRequest();
-        Conference conference;
-        try
-        {
-            conference = getOrCreateConference(conferenceIq);
-        }
-        catch (ConferenceNotFoundException e)
-        {
-            request.getCallback().invoke(
-                    IQUtils.createError(
-                            conferenceIq,
-                            XMPPError.Condition.bad_request,
-                            "Conference not found for ID: " + conferenceIq.getID()));
-            return;
-        }
-        catch (InGracefulShutdownException e)
-        {
-            request.getCallback().invoke(ColibriConferenceIQ.createGracefulShutdownErrorResponse(conferenceIq));
-            return;
-        }
-
-        // It is now the responsibility of Conference to send a response.
-        conference.getShim().enqueueColibriRequest(request);
-    }
-
-    private @NotNull Conference getOrCreateConference(ColibriConferenceIQ conferenceIq)
+    public @NotNull Conference getOrCreateConference(ColibriConferenceIQ conferenceIq)
             throws ConferenceNotFoundException, InGracefulShutdownException
     {
         String conferenceId = conferenceIq.getID();
@@ -424,9 +379,8 @@ public class Videobridge
         }
     }
 
-    private class ConferenceNotFoundException extends Exception {}
-    private class InGracefulShutdownException extends Exception {}
-
+    public class ConferenceNotFoundException extends Exception {}
+    public class InGracefulShutdownException extends Exception {}
 
     /**
      * Handles <tt>HealthCheckIQ</tt> by performing health check on this
@@ -689,7 +643,7 @@ public class Videobridge
         @Override
         public void colibriConferenceIqReceived(@NotNull XmppConnection.ColibriRequest request)
         {
-            handleColibriRequest(request);
+            shim.handleColibriRequest(request);
         }
 
         @NotNull
