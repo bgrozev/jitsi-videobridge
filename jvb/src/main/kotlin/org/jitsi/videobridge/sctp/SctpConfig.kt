@@ -22,6 +22,9 @@ import org.jitsi.metaconfig.config
 class SctpConfig private constructor() {
     val enabled: Boolean by config { "videobridge.sctp.enabled".from(JitsiConfig.newConfig) }
 
+    val useSsrSctp: Boolean by config {
+        "videobridge.sctp.use-usrsctp".from(JitsiConfig.newConfig)
+    }
     fun enabled() = enabled
 
     companion object {

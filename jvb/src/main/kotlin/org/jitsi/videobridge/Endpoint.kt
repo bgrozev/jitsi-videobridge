@@ -80,6 +80,8 @@ import org.jitsi.videobridge.relay.AudioSourceDesc
 import org.jitsi.videobridge.relay.RelayedEndpoint
 import org.jitsi.videobridge.rest.root.debug.EndpointDebugFeatures
 import org.jitsi.videobridge.sctp.DataChannelHandler
+import org.jitsi.videobridge.sctp.SctpHandler
+import org.jitsi.videobridge.sctp.SctpManager
 import org.jitsi.videobridge.stats.PacketTransitStats
 import org.jitsi.videobridge.transport.dtls.DtlsTransport
 import org.jitsi.videobridge.transport.ice.IceTransport
@@ -91,13 +93,20 @@ import org.jitsi.xmpp.extensions.colibri.WebSocketPacketExtension
 import org.jitsi.xmpp.extensions.jingle.DtlsFingerprintPacketExtension
 import org.jitsi.xmpp.extensions.jingle.IceUdpTransportPacketExtension
 import org.jitsi.xmpp.util.XmlStringBuilderUtil.Companion.toStringOpt
+import org.jitsi_modified.sctp4j.SctpDataCallback
+import org.jitsi_modified.sctp4j.SctpServerSocket
+import org.jitsi_modified.sctp4j.SctpSocket
 import org.json.simple.JSONObject
 import java.security.SecureRandom
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.util.*
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.collections.ArrayList
+import kotlin.collections.HashSet
+import org.jitsi.videobridge.sctp.SctpConfig.Companion.config as sctpConfig
 
 /**
  * Models a local endpoint (participant) in a [Conference]
@@ -127,7 +136,8 @@ class Endpoint @JvmOverloads constructor(
      */
     val creationTime = clock.instant()
 
-    private val sctpHandler = DcSctpHandler()
+    private val sctpHandler = if (sctpConfig.enabled && !sctpConfig.useSsrSctp) DcSctpHandler() else null
+    private val usrSctpHandler = if (sctpConfig.enabled && sctpConfig.useSsrSctp) SctpHandler() else null
     private val dataChannelHandler = DataChannelHandler()
 
     private val toggleablePcapWriter = ToggleablePcapWriter(logger, "$id-sctp")
@@ -136,7 +146,12 @@ class Endpoint @JvmOverloads constructor(
 
     private val sctpPipeline = pipeline {
         node(sctpRecvPcap)
-        node(sctpHandler)
+        sctpHandler?.let {
+            node(it)
+        }
+        usrSctpHandler?.let {
+            node(it)
+        }
     }
 
     /* TODO: do we ever want to support useUniquePort for an Endpoint? */
@@ -150,6 +165,9 @@ class Endpoint @JvmOverloads constructor(
     }
 
     private val timelineLogger = logger.createChildLogger("timeline.${this.javaClass.name}")
+
+    private var sctpManager: SctpManager? = null
+    private var sctpSocket: Optional<SctpServerSocket> = Optional.empty()
 
     /**
      * The [DcSctpTransport] instance we'll use to manage the SCTP connection
@@ -424,6 +442,7 @@ class Endpoint @JvmOverloads constructor(
                 logger.info("DTLS handshake complete")
                 transceiver.setSrtpInformation(chosenSrtpProtectionProfile, tlsRole, keyingMaterial, cryptex)
                 /* If we were the client of the SCTP connection, we would start it here. */
+                sctpSocket.ifPresent(::acceptUsrSctpConnection)
                 scheduleEndpointMessageTransportTimeout()
             }
         }
@@ -585,10 +604,109 @@ class Endpoint @JvmOverloads constructor(
      * to open it.
      */
     fun createSctpConnection() {
+        if (sctpConfig.enabled) {
+            if (sctpConfig.useSsrSctp) {
+                createUsrSctpConnection()
+            } else {
+                createDcSctpConnection()
+            }
+        } else {
+            logger.error("Not creating SCTP connection, SCTP is disabled in configuration.")
+        }
+    }
+
+    private fun createDcSctpConnection() {
         logger.cdebug { "Creating SCTP transport" }
         sctpTransport = DcSctpTransport(id, logger).also {
             it.start(SctpCallbacks(it))
-            sctpHandler.setSctpTransport(it)
+            sctpHandler?.setSctpTransport(it)
+        }
+    }
+
+    private fun createUsrSctpConnection() {
+        logger.cdebug { "Creating SCTP manager" }
+        // Create the SctpManager and provide it a method for sending SCTP data
+        sctpManager = SctpManager(
+            { data, offset, length ->
+                sctpSendPcap.observe(data, offset, length)
+                dtlsTransport.sendDtlsData(data, offset, length)
+                0
+            },
+            logger
+        )
+        usrSctpHandler!!.setSctpManager(sctpManager!!)
+        // NOTE(brian): as far as I know we always act as the 'server' for sctp
+        // connections, but if not we can make which type we use dynamic
+        val socket = sctpManager!!.createServerSocket(logger)
+        socket.eventHandler = object : SctpSocket.SctpSocketEventHandler {
+            override fun onReady() {
+                logger.info("SCTP connection is ready, creating the Data channel stack")
+                dataChannelStack = DataChannelStack(
+                    { data, sid, ppid -> socket.send(data, true, sid, ppid) },
+                    logger
+                )
+                // This handles if the remote side will be opening the data channel
+                dataChannelStack!!.onDataChannelStackEvents { dataChannel ->
+                    logger.info("Remote side opened a data channel.")
+                    messageTransport.setDataChannel(dataChannel)
+                }
+                dataChannelHandler.setDataChannelStack(dataChannelStack!!)
+                if (OPEN_DATA_CHANNEL_LOCALLY) {
+                    // This logic is for opening the data channel locally
+                    logger.info("Will open the data channel.")
+                    val dataChannel = dataChannelStack!!.createDataChannel(
+                        DataChannelProtocolConstants.RELIABLE,
+                        0,
+                        0,
+                        0,
+                        "default"
+                    )
+                    messageTransport.setDataChannel(dataChannel)
+                    dataChannel.open()
+                } else {
+                    logger.info("Will wait for the remote side to open the data channel.")
+                }
+            }
+
+            override fun onDisconnected() {
+                logger.info("SCTP connection is disconnected")
+            }
+        }
+        socket.dataCallback = SctpDataCallback { data, sid, ssn, tsn, ppid, context, flags ->
+            // We assume all data coming over SCTP will be datachannel data
+            val dataChannelPacket = DataChannelPacket(data, 0, data.size, sid, ppid.toInt())
+            // Post the rest of the task here because the current context is
+            // holding a lock inside the SctpSocket which can cause a deadlock
+            // if two endpoints are trying to send datachannel messages to one
+            // another (with stats broadcasting it can happen often)
+            incomingDataChannelMessagesQueue.add(PacketInfo(dataChannelPacket))
+        }
+        socket.listen()
+        sctpSocket = Optional.of(socket)
+    }
+
+    fun acceptUsrSctpConnection(sctpServerSocket: SctpServerSocket) {
+        TaskPools.IO_POOL.execute {
+            // We don't want to block the thread calling
+            // onDtlsHandshakeComplete so run the socket acceptance in an IO
+            // pool thread
+            // FIXME: This runs forever once the socket is closed (
+            // accept never returns true).
+            logger.info("Attempting to establish SCTP socket connection")
+            var attempts = 0
+            while (!sctpServerSocket.accept()) {
+                attempts++
+                try {
+                    Thread.sleep(100)
+                } catch (e: InterruptedException) {
+                    break
+                }
+                if (attempts > 100) {
+                    logger.error("Timed out waiting for SCTP connection from remote side")
+                    break
+                }
+            }
+            logger.cdebug { "SCTP socket ${sctpServerSocket.hashCode()} accepted connection" }
         }
     }
 
@@ -994,7 +1112,9 @@ class Endpoint @JvmOverloads constructor(
 
             transceiver.teardown()
             messageTransport.close()
-            sctpHandler.stop()
+            sctpHandler?.stop()
+            usrSctpHandler?.stop()
+            sctpManager?.closeConnection()
             sctpTransport?.socket?.close()
         } catch (t: Throwable) {
             logger.error("Exception while expiring: ", t)
