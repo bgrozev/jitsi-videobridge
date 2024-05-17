@@ -101,7 +101,7 @@ import java.security.SecureRandom
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.util.*
+import java.util.Optional
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.collections.ArrayList
@@ -131,14 +131,25 @@ class Endpoint @JvmOverloads constructor(
     PotentialPacketHandler,
     EncodingsManager.EncodingsUpdateListener,
     SsrcRewriter {
-    /**
-     * The time at which this endpoint was created
-     */
+
+    /** The time at which this endpoint was created */
     val creationTime = clock.instant()
 
-    private val sctpHandler = if (sctpConfig.enabled && !sctpConfig.useSsrSctp) DcSctpHandler() else null
-    private val usrSctpHandler = if (sctpConfig.enabled && sctpConfig.useSsrSctp) SctpHandler() else null
+    /**
+     * The two SCTP implementations (using usrsctp and dcsctp) are implemented side by side here. The intention is
+     * for the new dcsctp one to replace the old one, which will eventually be removed.
+     */
+    private val sctpHandler = if (sctpConfig.enabled && !sctpConfig.useUsrSctp) DcSctpHandler() else null
+    private val usrSctpHandler = if (sctpConfig.enabled && sctpConfig.useUsrSctp) SctpHandler() else null
+
+    /** The [DcSctpTransport] instance we'll use to manage the SCTP connection */
+    private var sctpTransport: DcSctpTransport? = null
+
+    // usrsctp
     private val dataChannelHandler = DataChannelHandler()
+    private var sctpManager: SctpManager? = null
+    private var sctpSocket: Optional<SctpServerSocket> = Optional.empty()
+    private var dataChannelStack: DataChannelStack? = null
 
     private val toggleablePcapWriter = ToggleablePcapWriter(logger, "$id-sctp")
     private val sctpRecvPcap = toggleablePcapWriter.newObserverNode(outbound = false)
@@ -165,16 +176,6 @@ class Endpoint @JvmOverloads constructor(
     }
 
     private val timelineLogger = logger.createChildLogger("timeline.${this.javaClass.name}")
-
-    private var sctpManager: SctpManager? = null
-    private var sctpSocket: Optional<SctpServerSocket> = Optional.empty()
-
-    /**
-     * The [DcSctpTransport] instance we'll use to manage the SCTP connection
-     */
-    private var sctpTransport: DcSctpTransport? = null
-
-    private var dataChannelStack: DataChannelStack? = null
 
     /**
      * Whether this endpoint should accept audio packets. We set this according
@@ -599,13 +600,13 @@ class Endpoint @JvmOverloads constructor(
     }
 
     /**
-     * Create an SCTP connection for this Endpoint.  If [OPEN_DATA_CHANNEL_LOCALLY] is true,
+     * Create an SCTP connection for this Endpoint. If [OPEN_DATA_CHANNEL_LOCALLY] is true,
      * we will create the data channel locally, otherwise we will wait for the remote side
      * to open it.
      */
     fun createSctpConnection() {
         if (sctpConfig.enabled) {
-            if (sctpConfig.useSsrSctp) {
+            if (sctpConfig.useUsrSctp) {
                 createUsrSctpConnection()
             } else {
                 createDcSctpConnection()

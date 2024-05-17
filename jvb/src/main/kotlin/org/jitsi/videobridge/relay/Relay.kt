@@ -177,12 +177,24 @@ class Relay @JvmOverloads constructor(
      */
     private var expired = false
 
+    /**
+     * The two SCTP implementations (using usrsctp and dcsctp) are implemented side by side here. The intention is
+     * for the new dcsctp one to replace the old one, which will eventually be removed.
+     */
+    private val sctpHandler = if (sctpConfig.enabled && !sctpConfig.useUsrSctp) DcSctpHandler() else null
+    private val usrSctpHandler = if (sctpConfig.enabled && sctpConfig.useUsrSctp) SctpHandler() else null
+
+    /** The [DcSctpTransport] instance we'll use to manage the SCTP connection */
+    private var sctpTransport: DcSctpTransport? = null
+
+    /** The role we'll play in the SCTP handshake, if negotiated */
+    private var sctpRole: Sctp.Role? = null
+
+    // usrsctp
     private var sctpManager: SctpManager? = null
     private var sctpSocket: SctpSocket? = null
-
-    private val sctpHandler = if (sctpConfig.enabled && !sctpConfig.useSsrSctp) DcSctpHandler() else null
-    private val usrSctpHandler = if (sctpConfig.enabled && sctpConfig.useSsrSctp) SctpHandler() else null
     private val dataChannelHandler = DataChannelHandler()
+    private var dataChannelStack: DataChannelStack? = null
 
     private val toggleablePcapWriter = ToggleablePcapWriter(logger, "$id-sctp")
     private val sctpRecvPcap = toggleablePcapWriter.newObserverNode(outbound = false)
@@ -217,18 +229,6 @@ class Relay @JvmOverloads constructor(
     }
 
     private val timelineLogger = logger.createChildLogger("timeline.${this.javaClass.name}")
-
-    /**
-     * The [DcSctpTransport] instance we'll use to manage the SCTP connection
-     */
-    private var sctpTransport: DcSctpTransport? = null
-
-    /**
-     * The role we'll play in the SCTP handshake, if negotiated
-     */
-    private var sctpRole: Sctp.Role? = null
-
-    private var dataChannelStack: DataChannelStack? = null
 
     private val relayedEndpoints = HashMap<String, RelayedEndpoint>()
     private val endpointsBySsrc = HashMap<Long, RelayedEndpoint>()
@@ -430,14 +430,14 @@ class Relay @JvmOverloads constructor(
             ) {
                 logger.info("DTLS handshake complete")
                 setSrtpInformation(chosenSrtpProtectionProfile, tlsRole, keyingMaterial)
-                if (sctpConfig.useSsrSctp) {
+                if (sctpConfig.enabled && sctpConfig.useUsrSctp) {
                     when (val socket = sctpSocket) {
-                        is SctpClientSocket -> connectSctpConnection(socket)
-                        is SctpServerSocket -> acceptSctpConnection(socket)
+                        is SctpClientSocket -> connectUsrSctpConnection(socket)
+                        is SctpServerSocket -> acceptUsrSctpConnection(socket)
                         else -> Unit
                     }
                     scheduleRelayMessageTransportTimeout()
-                } else {
+                } else if (sctpConfig.enabled) {
                     if (sctpRole == Sctp.Role.CLIENT) {
                         sctpTransport!!.socket.connect()
                     }
@@ -480,7 +480,7 @@ class Relay @JvmOverloads constructor(
      */
     fun createSctpConnection(sctpDesc: Sctp) {
         if (sctpConfig.enabled) {
-            if (sctpConfig.useSsrSctp) {
+            if (sctpConfig.useUsrSctp) {
                 createUsrSctpConnection(sctpDesc)
             } else {
                 createDcSctpConnection(sctpDesc)
@@ -573,7 +573,7 @@ class Relay @JvmOverloads constructor(
         sctpSocket = socket
     }
 
-    fun connectSctpConnection(sctpClientSocket: SctpClientSocket) {
+    fun connectUsrSctpConnection(sctpClientSocket: SctpClientSocket) {
         TaskPools.IO_POOL.execute {
             // We don't want to block the thread calling
             // onDtlsHandshakeComplete so run the socket acceptance in an IO
@@ -586,7 +586,7 @@ class Relay @JvmOverloads constructor(
         }
     }
 
-    fun acceptSctpConnection(sctpServerSocket: SctpServerSocket) {
+    fun acceptUsrSctpConnection(sctpServerSocket: SctpServerSocket) {
         TaskPools.IO_POOL.execute {
             // We don't want to block the thread calling
             // onDtlsHandshakeComplete so run the socket acceptance in an IO
