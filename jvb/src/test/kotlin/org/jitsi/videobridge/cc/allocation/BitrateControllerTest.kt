@@ -16,11 +16,13 @@
  */
 package org.jitsi.videobridge.cc.allocation
 
+import io.kotest.assertions.withClue
 import io.kotest.core.spec.IsolationMode
 import io.kotest.core.spec.Spec
 import io.kotest.core.spec.style.ShouldSpec
 import io.kotest.matchers.collections.shouldContainInOrder
 import io.kotest.matchers.longs.shouldBeWithinPercentageOf
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.mockk.CapturingSlot
 import io.mockk.every
@@ -1551,5 +1553,28 @@ data class Event<T>(
         if (other !is Event<*>) return false
         // Ignore this.time
         return bwe == other.bwe && event == other.event
+    }
+}
+
+fun BandwidthAllocation.shouldMatch(other: BandwidthAllocation) {
+    allocations.size shouldBe other.allocations.size
+    allocations.forEach { thisSingleAllocation ->
+        withClue("Allocation for ${thisSingleAllocation.endpointId}") {
+            val otherSingleAllocation = other.allocations.find { it.endpointId == thisSingleAllocation.endpointId }
+            otherSingleAllocation.shouldNotBeNull()
+            thisSingleAllocation.targetLayer?.height shouldBe otherSingleAllocation.targetLayer?.height
+            thisSingleAllocation.targetLayer?.frameRate shouldBe otherSingleAllocation.targetLayer?.frameRate
+        }
+    }
+}
+
+fun List<Event<BandwidthAllocation>>.shouldMatchInOrder(vararg events: Event<BandwidthAllocation>) {
+    size shouldBe events.size
+    events.forEachIndexed { i, it ->
+        this[i].bwe shouldBe it.bwe
+        withClue("bwe=${it.bwe}") {
+            this[i].event.shouldMatch(it.event)
+        }
+        // Ignore this.time
     }
 }

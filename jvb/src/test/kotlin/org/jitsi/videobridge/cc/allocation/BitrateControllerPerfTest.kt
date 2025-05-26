@@ -15,17 +15,12 @@
  */
 package org.jitsi.videobridge.cc.allocation
 
-import io.kotest.assertions.withClue
-import io.kotest.core.spec.style.StringSpec
-import io.kotest.matchers.nulls.shouldNotBeNull
-import io.kotest.matchers.shouldBe
 import org.jitsi.nlj.PacketInfo
 import org.jitsi.nlj.format.RtxPayloadType
 import org.jitsi.nlj.rtp.VideoRtpPacket
 import org.jitsi.utils.logging.DiagnosticContext
 import org.jitsi.utils.logging2.createLogger
 import org.jitsi.utils.ms
-import org.jitsi.utils.nanos
 import org.jitsi.utils.secs
 import org.jitsi.utils.time.FakeClock
 import org.jitsi.videobridge.message.ReceiverVideoConstraintsMessage
@@ -59,8 +54,7 @@ import kotlin.time.ExperimentalTime
  *
  */
 @ExperimentalTime
-class BitrateControllerPerfTest : StringSpec() {
-    private val logger = createLogger()
+class BitrateControllerBenchmarkImpl {
     private val clock = FakeClock()
     private val random = Random(93232)
 
@@ -89,27 +83,15 @@ class BitrateControllerPerfTest : StringSpec() {
         addPayloadType(RtxPayloadType(123, mapOf("apt" to "124")))
     }
 
-    init {
-        "Tile view".config(enabled = false) {
-            repeat(5) {
-                run("Warmup", listOf("A", "B", "C", "D", "E"), 180)
-            }
-            repeat(10) {
-                run("Tile view", listOf("A", "B", "C", "D", "E"), 180)
-            }
-        }
-        "Stage view".config(enabled = false) {
-            repeat(5) {
-                run("Warmup", listOf("A"), 720)
-            }
-            repeat(10) {
-                run("Stage view", listOf("A"), 720)
-            }
-        }
+    fun tileView() {
+        run(listOf("A", "B", "C", "D", "E"), 180)
     }
 
-    private fun run(testName: String, selectedEndpoints: List<String>, maxFrameHeight: Int) {
-        val start = System.nanoTime()
+    fun stageView() {
+        run(listOf("A"), 720)
+    }
+
+    private fun run(selectedEndpoints: List<String>, maxFrameHeight: Int) {
         bc.lastN = 7
 
         // Ramp-up to 5mbps
@@ -132,11 +114,6 @@ class BitrateControllerPerfTest : StringSpec() {
             bc.endpointOrderingChanged()
             clock.elapse(2.secs)
         }
-
-        val stop = System.nanoTime()
-        val totalDuration = (stop - start).nanos
-        val microsPerSpeakerChange = ((stop - start).toDouble() / NUM_SPEAKER_CHANGES) / 1000.0
-        logger.info("$testName took a total of $totalDuration, $microsPerSpeakerChange µs per speaker change.")
     }
 
     private fun <T : Any> MutableList<T>.selectNewDominantSpeaker() {
@@ -146,27 +123,4 @@ class BitrateControllerPerfTest : StringSpec() {
     }
 }
 
-const val NUM_SPEAKER_CHANGES = 1_000_000
-
-fun BandwidthAllocation.shouldMatch(other: BandwidthAllocation) {
-    allocations.size shouldBe other.allocations.size
-    allocations.forEach { thisSingleAllocation ->
-        withClue("Allocation for ${thisSingleAllocation.endpointId}") {
-            val otherSingleAllocation = other.allocations.find { it.endpointId == thisSingleAllocation.endpointId }
-            otherSingleAllocation.shouldNotBeNull()
-            thisSingleAllocation.targetLayer?.height shouldBe otherSingleAllocation.targetLayer?.height
-            thisSingleAllocation.targetLayer?.frameRate shouldBe otherSingleAllocation.targetLayer?.frameRate
-        }
-    }
-}
-
-fun List<Event<BandwidthAllocation>>.shouldMatchInOrder(vararg events: Event<BandwidthAllocation>) {
-    size shouldBe events.size
-    events.forEachIndexed { i, it ->
-        this[i].bwe shouldBe it.bwe
-        withClue("bwe=${it.bwe}") {
-            this[i].event.shouldMatch(it.event)
-        }
-        // Ignore this.time
-    }
-}
+const val NUM_SPEAKER_CHANGES = 10_000
